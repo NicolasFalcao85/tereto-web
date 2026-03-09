@@ -159,36 +159,62 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index }: { post: Po
   );
 }
 
-function ChallengeModal({ post, onClose, onUnlock }: { post: Post; onClose: ()=>void; onUnlock: (id:string)=>void }) {
+function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose: ()=>void; onUnlock: (id:string, photoFile?: File)=>Promise<void>; user: User }) {
   const [answer, setAnswer] = useState("");
   const [attempts, setAttempts] = useState(post.max_attempts);
-  const [status, setStatus] = useState<"idle"|"wrong"|"success">("idle");
+  const [status, setStatus] = useState<"idle"|"wrong"|"success"|"pending"|"uploading">("idle");
   const [showHint, setShowHint] = useState(false);
-  const [photoName, setPhotoName] = useState<string|null>(null);
+  const [photoFile, setPhotoFile] = useState<File|null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string|null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   useEffect(()=>{ if(post.challenge_type==="trivia") setTimeout(()=>inputRef.current?.focus(),100); },[post.challenge_type]);
 
-  function handleSubmit() {
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = ev => setPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  async function handleSubmit() {
     if (post.challenge_type==="trivia") {
       if (!answer.trim()) return;
       if (answer.trim().toLowerCase()===post.correct_answer?.toLowerCase()) { setStatus("success"); setTimeout(()=>onUnlock(post.id),1400); }
       else { setAttempts(a=>a-1); setStatus("wrong"); setTimeout(()=>setStatus("idle"),1200); }
-    } else { if (!photoName) return; setStatus("success"); setTimeout(()=>onUnlock(post.id),1400); }
+    } else {
+      if (!photoFile) return;
+      setStatus("uploading");
+      await onUnlock(post.id, photoFile);
+      setStatus("pending");
+    }
   }
 
-  const canSubmit = post.challenge_type==="trivia" ? attempts>0&&!!answer.trim() : !!photoName;
+  const canSubmit = post.challenge_type==="trivia" ? attempts>0&&!!answer.trim() : !!photoFile;
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"90vh",overflowY:"auto"}}>
         <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)",margin:"0 auto 22px"}}/>
-        {status==="success"?(
+        {status==="success"&&(
           <div style={{textAlign:"center",padding:"20px 0"}}>
             <div style={{fontSize:64,animation:"pop .4s cubic-bezier(.22,1,.36,1) both",marginBottom:12}}>🔓</div>
             <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,color:"var(--accent)",marginBottom:6}}>¡Reto superado!</div>
             <div style={{color:"var(--muted)",fontSize:14}}>Desbloqueando contenido…</div>
           </div>
-        ):(
+        )}
+        {(status==="pending"||status==="uploading")&&(
+          <div style={{textAlign:"center",padding:"20px 0"}}>
+            <div style={{fontSize:64,marginBottom:12}}>{status==="uploading"?"⏳":"📬"}</div>
+            <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,color:"var(--accent)",marginBottom:6}}>{status==="uploading"?"Subiendo foto…":"¡Foto enviada!"}</div>
+            <div style={{color:"var(--muted)",fontSize:14,lineHeight:1.6}}>{status==="uploading"?"Espera un momento...":"El creador del reto va a revisar tu foto.\nTe avisamos cuando sea aprobada."}</div>
+            {status==="pending"&&<button onClick={onClose} style={{marginTop:20,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:12,padding:"10px 20px",cursor:"pointer",color:"var(--text)",fontFamily:"var(--font-b)",fontSize:14}}>Cerrar</button>}
+          </div>
+        )}
+        {status==="idle"||status==="wrong"?(
           <>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
               <Avatar size={32} img={post.profile?.avatar_url}/>
@@ -211,31 +237,127 @@ function ChallengeModal({ post, onClose, onUnlock }: { post: Post; onClose: ()=>
               </>
             )}
             {post.challenge_type==="photo"&&(
-              <label style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,padding:"28px 16px",background:photoName?"rgba(78,205,196,.06)":"var(--surface2)",border:`1.5px dashed ${photoName?"#4ECDC4":"var(--border2)"}`,borderRadius:16,cursor:"pointer",marginBottom:16}}>
-                <span style={{fontSize:32}}>{photoName?"✅":"📸"}</span>
-                <span style={{fontSize:14,color:photoName?"#4ECDC4":"var(--muted)",fontWeight:photoName?600:400}}>{photoName||"Tocá para elegir una foto"}</span>
-                <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>e.target.files?.[0]&&setPhotoName(e.target.files[0].name)}/>
-              </label>
+              <div style={{marginBottom:16}}>
+                {photoPreview?(
+                  <div style={{position:"relative",borderRadius:16,overflow:"hidden",marginBottom:10}}>
+                    <img src={photoPreview} style={{width:"100%",height:200,objectFit:"cover",display:"block"}} alt="preview"/>
+                    <button onClick={()=>{setPhotoFile(null);setPhotoPreview(null);}} style={{position:"absolute",top:8,right:8,background:"rgba(10,10,14,.8)",border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:"var(--font-b)"}}>Cambiar</button>
+                  </div>
+                ):(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                    <label style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,padding:"20px 12px",background:"var(--surface2)",border:"1.5px dashed var(--border2)",borderRadius:14,cursor:"pointer"}}>
+                      <span style={{fontSize:28}}>📷</span>
+                      <span style={{fontSize:13,color:"var(--muted)",fontWeight:500}}>Cámara</span>
+                      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handlePhotoSelect}/>
+                    </label>
+                    <label style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,padding:"20px 12px",background:"var(--surface2)",border:"1.5px dashed var(--border2)",borderRadius:14,cursor:"pointer"}}>
+                      <span style={{fontSize:28}}>🖼️</span>
+                      <span style={{fontSize:13,color:"var(--muted)",fontWeight:500}}>Galería</span>
+                      <input ref={galleryRef} type="file" accept="image/*" style={{display:"none"}} onChange={handlePhotoSelect}/>
+                    </label>
+                  </div>
+                )}
+                <div style={{padding:"8px 12px",borderRadius:10,background:"rgba(78,205,196,.06)",border:"1px solid rgba(78,205,196,.2)",fontSize:12,color:"#4ECDC4"}}>
+                  📋 El creador del reto va a verificar tu foto antes de desbloquear el contenido.
+                </div>
+              </div>
             )}
             <button onClick={handleSubmit} disabled={!canSubmit}
               style={{width:"100%",padding:"15px",background:canSubmit?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:canSubmit?"pointer":"default",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canSubmit?"#0A0A0E":"var(--muted)",transition:"all .2s"}}>
-              {attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":"Responder →"}
+              {attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":post.challenge_type==="photo"?"Enviar foto 📸":"Responder →"}
             </button>
           </>
-        )}
+        ):null}
       </div>
     </div>
   );
 }
 
-function BottomNav({ active, onChange }: { active: string; onChange: (id:string)=>void }) {
+interface PendingUnlock { id: string; photo_url: string; created_at: string; post: Post; challenger: Profile; }
+
+function NotificationsPage({ user, posts }: { user: User; posts: Post[] }) {
+  const [pending, setPending] = useState<PendingUnlock[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{ loadPending(); },[]);
+
+  async function loadPending() {
+    setLoading(true);
+    // Get my posts that have pending unlocks
+    const myPostIds = posts.filter(p=>p.user_id===user.id).map(p=>p.id);
+    if (myPostIds.length===0) { setLoading(false); return; }
+    const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${myPostIds.join(",")})&select=*,post:posts(*),challenger:profiles!unlocks_user_id_fkey(*)`);
+    if (Array.isArray(data)) setPending(data);
+    setLoading(false);
+  }
+
+  async function handleReview(unlockId: string, approve: boolean) {
+    await sbFetch(`unlocks?id=eq.${unlockId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: approve?"approved":"rejected", reviewed_at: new Date().toISOString() }),
+      headers: { Prefer:"return=minimal" }
+    });
+    setPending(prev=>prev.filter(u=>u.id!==unlockId));
+  }
+
+  return (
+    <div style={{maxWidth:520,margin:"0 auto",padding:"0 0 80px",animation:"fadeUp .35s ease both"}}>
+      <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(10,10,14,.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid var(--border)",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <h2 style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800}}>Notificaciones 🔔</h2>
+        {pending.length>0&&<div style={{background:"var(--accent)",color:"#0A0A0E",borderRadius:99,padding:"2px 10px",fontSize:12,fontWeight:800}}>{pending.length}</div>}
+      </div>
+      <div style={{padding:"12px"}}>
+        {loading?<div style={{display:"flex",justifyContent:"center",padding:"60px 0"}}><Spinner/></div>:
+         pending.length===0?(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:48,marginBottom:12}}>🎉</div>
+            <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>Todo al día</div>
+            <div style={{color:"var(--muted)",fontSize:14}}>No tenés fotos pendientes de revisión.</div>
+          </div>
+         ):(
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            {pending.map(u=>(
+              <div key={u.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden"}}>
+                <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid var(--border)"}}>
+                  <Avatar size={32} img={u.challenger?.avatar_url}/>
+                  <div style={{flex:1}}>
+                    <span style={{fontWeight:600,fontSize:13}}>{u.challenger?.full_name||"Usuario"}</span>
+                    <div style={{fontSize:11,color:"var(--muted)"}}>quiere desbloquear tu reto • {timeAgo(u.created_at)}</div>
+                  </div>
+                </div>
+                <div style={{padding:"10px 14px",fontSize:13,color:"var(--muted)",borderBottom:"1px solid var(--border)"}}>
+                  <span style={{color:"var(--text)",fontWeight:500}}>Reto: </span>{u.post?.prompt}
+                </div>
+                {u.photo_url&&<img src={u.photo_url} style={{width:"100%",maxHeight:280,objectFit:"cover",display:"block"}} alt="foto del reto"/>}
+                <div style={{padding:"12px 14px",display:"flex",gap:8}}>
+                  <button onClick={()=>handleReview(u.id,true)}
+                    style={{flex:1,padding:"11px",background:"rgba(232,255,71,.1)",border:"1.5px solid var(--accent)",borderRadius:12,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"var(--accent)"}}>
+                    ✅ Aprobar
+                  </button>
+                  <button onClick={()=>handleReview(u.id,false)}
+                    style={{flex:1,padding:"11px",background:"rgba(255,107,107,.08)",border:"1.5px solid #FF6B6B",borderRadius:12,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"#FF6B6B"}}>
+                    ❌ Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+         )
+        }
+      </div>
+    </div>
+  );
+}
+
+function BottomNav({ active, onChange, pendingCount }: { active: string; onChange: (id:string)=>void; pendingCount: number }) {
   const items = [{id:"feed",icon:"🏠",label:"Feed"},{id:"explore",icon:"🔍",label:"Explorar"},{id:"create",icon:"⚡",label:"",accent:true},{id:"notifs",icon:"🔔",label:"Notifs"},{id:"profile",icon:"👤",label:"Perfil"}];
   return (
     <nav style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(10,10,14,.95)",backdropFilter:"blur(16px)",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-around",alignItems:"center",padding:"10px 0 20px",zIndex:20}}>
       {items.map(item=>(
-        <button key={item.id} onClick={()=>onChange(item.id)} style={{background:item.accent?"var(--accent)":"none",border:"none",borderRadius:item.accent?"50%":0,width:item.accent?44:"auto",height:item.accent?44:"auto",cursor:"pointer",display:"flex",flexDirection:item.accent?"row":"column",alignItems:"center",justifyContent:"center",gap:3,padding:item.accent?0:"4px 8px",opacity:!item.accent&&active!==item.id?0.4:1,transition:"opacity .15s"}}>
+        <button key={item.id} onClick={()=>onChange(item.id)} style={{background:item.accent?"var(--accent)":"none",border:"none",borderRadius:item.accent?"50%":0,width:item.accent?44:"auto",height:item.accent?44:"auto",cursor:"pointer",display:"flex",flexDirection:item.accent?"row":"column",alignItems:"center",justifyContent:"center",gap:3,padding:item.accent?0:"4px 8px",opacity:!item.accent&&active!==item.id?0.4:1,transition:"opacity .15s",position:"relative"}}>
           <span style={{fontSize:item.accent?20:18}}>{item.icon}</span>
           {!item.accent&&<span style={{fontSize:10,color:active===item.id?"var(--text)":"var(--muted)",fontWeight:active===item.id?600:400}}>{item.label}</span>}
+          {item.id==="notifs"&&pendingCount>0&&<div style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:"50%",background:"var(--accent)"}}/>}
         </button>
       ))}
     </nav>
@@ -413,12 +535,13 @@ export default function App() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
   const [likedIds, setLikedIds] = useState<string[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [activeNav, setActiveNav] = useState("feed");
   const [challengePost, setChallengePost] = useState<Post|null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
 
   useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user) setUser(s.user); setLoading(false); }); },[]);
-  useEffect(()=>{ if(user){ loadPosts(); loadUnlocks(); loadLikes(); } },[user]);
+  useEffect(()=>{ if(user){ loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); } },[user]);
 
   async function loadPosts() {
     setPostsLoading(true);
@@ -430,7 +553,7 @@ export default function App() {
 
   async function loadUnlocks() {
     if (!user) return;
-    const data = await sbFetch(`unlocks?user_id=eq.${user.id}&select=post_id`);
+    const data = await sbFetch(`unlocks?user_id=eq.${user.id}&status=eq.approved&select=post_id`);
     if (Array.isArray(data)) setUnlockedIds(data.map((u: {post_id:string})=>u.post_id));
   }
 
@@ -440,11 +563,28 @@ export default function App() {
     if (Array.isArray(data)) setLikedIds(data.map((l: {post_id:string})=>l.post_id));
   }
 
-  async function handleUnlock(postId: string) {
+  async function loadPendingCount() {
     if (!user) return;
-    await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId }), headers:{ Prefer:"return=minimal" } });
-    await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({ points:(unlockedIds.length+1)*150 }), headers:{ Prefer:"return=minimal" } });
-    setUnlockedIds(prev=>[...prev,postId]);
+    const myPosts = await sbFetch(`posts?user_id=eq.${user.id}&select=id`);
+    if (!Array.isArray(myPosts)||myPosts.length===0) return;
+    const ids = myPosts.map((p:{id:string})=>p.id).join(",");
+    const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${ids})&select=id`);
+    if (Array.isArray(data)) setPendingCount(data.length);
+  }
+
+  async function handleUnlock(postId: string, photoFile?: File) {
+    if (!user) return;
+    const post = posts.find(p=>p.id===postId);
+    if (!post) return;
+    if (post.challenge_type==="photo" && photoFile) {
+      const photo_url = await uploadImage(user.id, photoFile);
+      if (!photo_url) return;
+      await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
+    } else {
+      await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"approved" }), headers:{ Prefer:"return=minimal" } });
+      await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({ points:(unlockedIds.length+1)*150 }), headers:{ Prefer:"return=minimal" } });
+      setUnlockedIds(prev=>[...prev,postId]);
+    }
     setChallengePost(null);
   }
 
@@ -491,16 +631,17 @@ export default function App() {
             </div>
           )}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
+          {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts}/>}
           {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout}/>}
-          {["explore","notifs"].includes(activeNav)&&(
+          {activeNav==="explore"&&(
             <div style={{maxWidth:520,margin:"0 auto",padding:"80px 24px",textAlign:"center"}}>
-              <div style={{fontSize:52,marginBottom:16}}>{activeNav==="explore"?"🔍":"🔔"}</div>
-              <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:10}}>{activeNav==="explore"?"Explorar":"Notificaciones"}</div>
+              <div style={{fontSize:52,marginBottom:16}}>🔍</div>
+              <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:10}}>Explorar</div>
               <div style={{color:"var(--muted)",fontSize:14}}>Próximamente.</div>
             </div>
           )}
-          <BottomNav active={activeNav} onChange={setActiveNav}/>
-          {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock}/>}
+          <BottomNav active={activeNav} onChange={setActiveNav} pendingCount={pendingCount}/>
+          {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
         </>
       )}
     </div></>
