@@ -4,8 +4,9 @@ const SUPABASE_URL = "https://aedbqwnsskuznmbywyav.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_XP97uQLTvyBvGvhVTApwDA_V0g1hAmq";
 
 interface User { id: string; email: string; user_metadata: { full_name?: string; avatar_url?: string }; }
-interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; }
-interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; correct_answer: string|null; hint: string|null; max_attempts: number; created_at: string; profile?: Profile; unlocked?: boolean; likes_count?: number; }
+interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; is_private?: boolean; }
+interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; correct_answer: string|null; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; profile?: Profile; unlocked?: boolean; likes_count?: number; }
+interface Follow { id: string; follower_id: string; following_id: string; status: "pending"|"accepted"|"rejected"; created_at: string; profile?: Profile; }
 
 function getToken() { return localStorage.getItem("sb_access_token") ?? ""; }
 
@@ -371,12 +372,16 @@ function NotificationsPage({ user, posts, onReviewed }: { user: User; posts: Pos
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {myNotifs.map(n=>(
                 <div key={n.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{fontSize:28}}>{n.type==="unlock_approved"?"✅":"❌"}</div>
+                  <div style={{fontSize:28}}>
+                    {n.type==="unlock_approved"?"✅":n.type==="unlock_rejected"?"❌":n.type==="follow_accepted"?"🤝":"👋"}
+                  </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:600,color:n.type==="unlock_approved"?"var(--accent)":"#FF6B6B"}}>
-                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":"Tu foto fue rechazada"}
+                    <div style={{fontSize:13,fontWeight:600,color:n.type==="unlock_approved"||n.type==="follow_accepted"?"var(--accent)":n.type==="unlock_rejected"?"#FF6B6B":"var(--text)"}}>
+                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":n.type==="unlock_rejected"?"Tu foto fue rechazada":n.type==="follow_accepted"?"¡Alguien aceptó tu solicitud!":"Nueva solicitud de seguimiento"}
                     </div>
-                    <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>{n.post?.prompt?.slice(0,50)||"Reto"} • {timeAgo(n.created_at)}</div>
+                    <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>
+                      {(n.type==="unlock_approved"||n.type==="unlock_rejected")&&n.post?.prompt?.slice(0,50)} • {timeAgo(n.created_at)}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -440,20 +445,46 @@ function BottomNav({ active, onChange, pendingCount }: { active: string; onChang
   );
 }
 
-function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void }) {
+function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void }) {
   const myPosts = posts.filter(p=>p.user_id===user.id);
   const [username, setUsername] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameError, setUsernameError] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
   const [copied, setCopied] = useState<string|null>(null);
+  const [followRequests, setFollowRequests] = useState<Follow[]>([]);
 
   useEffect(()=>{
-    sbFetch(`profiles?id=eq.${user.id}&select=username`).then(data=>{
-      if (Array.isArray(data)&&data.length>0&&data[0].username) setUsername(data[0].username);
+    sbFetch(`profiles?id=eq.${user.id}&select=username,is_private`).then(data=>{
+      if (Array.isArray(data)&&data.length>0) {
+        if (data[0].username) setUsername(data[0].username);
+        setIsPrivate(!!data[0].is_private);
+      }
     });
+    loadFollowRequests();
   },[user.id]);
+
+  async function loadFollowRequests() {
+    const data = await sbFetch(`follows?following_id=eq.${user.id}&status=eq.pending&select=*,profile:profiles!follows_follower_id_fkey(id,full_name,username,avatar_url)`);
+    if (Array.isArray(data)) setFollowRequests(data);
+  }
+
+  async function handlePrivacyToggle() {
+    const newVal = !isPrivate;
+    setIsPrivate(newVal);
+    await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({is_private:newVal}), headers:{Prefer:"return=minimal"} });
+  }
+
+  async function handleFollowRequest(followId: string, accept: boolean, followerId: string) {
+    await sbFetch(`follows?id=eq.${followId}`, { method:"PATCH", body:JSON.stringify({status:accept?"accepted":"rejected"}), headers:{Prefer:"return=minimal"} });
+    if (accept) {
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:followerId, type:"follow_accepted" }), headers:{Prefer:"return=minimal"} });
+      onFollowChange();
+    }
+    setFollowRequests(prev=>prev.filter(f=>f.id!==followId));
+  }
 
   async function handleSaveUsername() {
     const val = usernameInput.trim().toLowerCase().replace(/[^a-z0-9_.]/g,"");
@@ -508,10 +539,48 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted }: { us
           </div>
         ):(
           <button onClick={()=>{ setUsernameInput(username); setEditingUsername(true); }}
-            style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"8px 14px",cursor:"pointer",color:username?"var(--accent)":"var(--muted)",fontSize:13,fontFamily:"var(--font-b)",width:"100%",textAlign:"left"}}>
+            style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"8px 14px",cursor:"pointer",color:username?"var(--accent)":"var(--muted)",fontSize:13,fontFamily:"var(--font-b)",width:"100%",textAlign:"left",marginBottom:10}}>
             {username?`@${username}`:"+ Elegir @username"}
           </button>
         )}
+
+        {/* Privacy toggle */}
+        <button onClick={handlePrivacyToggle}
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px 14px",cursor:"pointer"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:16}}>{isPrivate?"🔒":"🌍"}</span>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{isPrivate?"Cuenta privada":"Cuenta pública"}</div>
+              <div style={{fontSize:11,color:"var(--muted)"}}>{isPrivate?"Solo tus seguidores ven tus posts":"Todos pueden ver tus posts"}</div>
+            </div>
+          </div>
+          <div style={{width:36,height:20,borderRadius:99,background:isPrivate?"var(--accent)":"var(--border2)",position:"relative",transition:"background .2s"}}>
+            <div style={{position:"absolute",top:3,left:isPrivate?18:3,width:14,height:14,borderRadius:"50%",background:isPrivate?"#0A0A0E":"var(--muted)",transition:"left .2s"}}/>
+          </div>
+        </button>
+      </div>
+
+      {/* Follow requests */}
+      {followRequests.length>0&&(
+        <div style={{margin:"12px 16px 0"}}>
+          <div style={{fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,marginBottom:8}}>Solicitudes de seguimiento ({followRequests.length})</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {followRequests.map(req=>(
+              <div key={req.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:"12px",display:"flex",alignItems:"center",gap:10}}>
+                <Avatar size={36} img={req.profile?.avatar_url}/>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600,fontSize:13}}>{req.profile?.full_name||"Usuario"}</div>
+                  {req.profile?.username&&<div style={{fontSize:11,color:"var(--muted)"}}>@{req.profile.username}</div>}
+                </div>
+                <button onClick={()=>handleFollowRequest(req.id,true,req.follower_id)}
+                  style={{padding:"6px 12px",background:"rgba(232,255,71,.1)",border:"1.5px solid var(--accent)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700,color:"var(--accent)",fontFamily:"var(--font-b)"}}>✓</button>
+                <button onClick={()=>handleFollowRequest(req.id,false,req.follower_id)}
+                  style={{padding:"6px 12px",background:"rgba(255,107,107,.06)",border:"1px solid rgba(255,107,107,.3)",borderRadius:8,cursor:"pointer",fontSize:12,color:"#FF6B6B",fontFamily:"var(--font-b)"}}>✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       </div>
 
       {/* Stats */}
@@ -556,28 +625,93 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted }: { us
   );
 }
 
-function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId }: { posts: Post[]; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; currentUserId: string }) {
+function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, followingIds, onFollowChange }: { posts: Post[]; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; currentUserId: string; followingIds: string[]; onFollowChange: ()=>void }) {
   const [search, setSearch] = useState("");
-  const otherPosts = posts.filter(p=>p.user_id!==currentUserId);
-  const filtered = search.trim()
-    ? otherPosts.filter(p=>p.caption?.toLowerCase().includes(search.toLowerCase())||p.prompt?.toLowerCase().includes(search.toLowerCase())||p.profile?.full_name?.toLowerCase().includes(search.toLowerCase()))
-    : otherPosts;
+  const [pendingFollows, setPendingFollows] = useState<string[]>([]);
+  const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
+  const [tab, setTab] = useState<"posts"|"people">("posts");
+
+  useEffect(()=>{
+    sbFetch(`profiles?id=neq.${currentUserId}&select=id,full_name,username,avatar_url,is_private`).then(data=>{
+      if (Array.isArray(data)) setAllProfiles(data);
+    });
+    sbFetch(`follows?follower_id=eq.${currentUserId}&status=eq.pending&select=following_id`).then(data=>{
+      if (Array.isArray(data)) setPendingFollows(data.map((f:{following_id:string})=>f.following_id));
+    });
+  },[currentUserId]);
+
+  async function handleFollow(profileId: string) {
+    if (followingIds.includes(profileId)) {
+      await sbFetch(`follows?follower_id=eq.${currentUserId}&following_id=eq.${profileId}`, { method:"DELETE" });
+      onFollowChange();
+    } else if (pendingFollows.includes(profileId)) {
+      await sbFetch(`follows?follower_id=eq.${currentUserId}&following_id=eq.${profileId}`, { method:"DELETE" });
+      setPendingFollows(prev=>prev.filter(id=>id!==profileId));
+    } else {
+      await sbFetch("follows", { method:"POST", body:JSON.stringify({ follower_id:currentUserId, following_id:profileId, status:"pending" }), headers:{ Prefer:"return=minimal" } });
+      // notify
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:profileId, type:"follow_request" }), headers:{ Prefer:"return=minimal" } });
+      setPendingFollows(prev=>[...prev,profileId]);
+      onFollowChange();
+    }
+  }
+
+  function followLabel(profileId: string) {
+    if (followingIds.includes(profileId)) return "✓ Siguiendo";
+    if (pendingFollows.includes(profileId)) return "⏳ Pendiente";
+    return "+ Seguir";
+  }
+  function followStyle(profileId: string) {
+    const following = followingIds.includes(profileId);
+    const pending = pendingFollows.includes(profileId);
+    return { padding:"7px 14px", borderRadius:99, border:`1.5px solid ${following?"var(--border2)":pending?"rgba(232,255,71,.3)":"var(--accent)"}`, background:following?"var(--surface2)":pending?"rgba(232,255,71,.06)":"rgba(232,255,71,.1)", cursor:"pointer", fontSize:12, fontWeight:700, color:following?"var(--muted)":pending?"rgba(232,255,71,.7)":"var(--accent)", fontFamily:"var(--font-b)" } as React.CSSProperties;
+  }
+
+  const otherPosts = posts.filter(p=>p.user_id!==currentUserId && (p.visibility==="public" || followingIds.includes(p.user_id)) && (!p.profile?.is_private || followingIds.includes(p.user_id)));
+  const filtered = search.trim() ? otherPosts.filter(p=>p.caption?.toLowerCase().includes(search.toLowerCase())||p.prompt?.toLowerCase().includes(search.toLowerCase())||p.profile?.full_name?.toLowerCase().includes(search.toLowerCase())) : otherPosts;
+  const filteredProfiles = search.trim() ? allProfiles.filter(p=>p.full_name?.toLowerCase().includes(search.toLowerCase())||p.username?.toLowerCase().includes(search.toLowerCase())) : allProfiles;
 
   return (
     <div style={{maxWidth:520,margin:"0 auto",padding:"0 0 80px",animation:"fadeUp .35s ease both"}}>
       <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(10,10,14,.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid var(--border)",padding:"16px 20px"}}>
         <h2 style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:12}}>Explorar 🔍</h2>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar retos, usuarios..."
-          style={{width:"100%",padding:"11px 14px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+          style={{width:"100%",padding:"11px 14px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",marginBottom:10}}/>
+        <div style={{display:"flex",gap:8}}>
+          {([["posts","Retos"],["people","Personas"]] as [string,string][]).map(([t,l])=>(
+            <button key={t} onClick={()=>setTab(t as "posts"|"people")}
+              style={{padding:"7px 16px",borderRadius:99,border:`1.5px solid ${tab===t?"var(--accent)":"var(--border2)"}`,background:tab===t?"rgba(232,255,71,.08)":"none",cursor:"pointer",fontFamily:"var(--font-b)",fontSize:13,fontWeight:600,color:tab===t?"var(--accent)":"var(--muted)"}}>
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
-      <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:16}}>
-        {filtered.length===0?(
-          <div style={{textAlign:"center",padding:"60px 20px"}}>
-            <div style={{fontSize:48,marginBottom:12}}>🔍</div>
-            <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>{search?"Sin resultados":"Sin posts de otros usuarios"}</div>
-            <div style={{color:"var(--muted)",fontSize:14}}>Invitá amigos para que publiquen sus retos.</div>
-          </div>
-        ):filtered.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike}/>)}
+      <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:tab==="people"?10:16}}>
+        {tab==="posts"?(
+          filtered.length===0?(
+            <div style={{textAlign:"center",padding:"60px 20px"}}>
+              <div style={{fontSize:48,marginBottom:12}}>🔍</div>
+              <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>{search?"Sin resultados":"Sin retos públicos aún"}</div>
+              <div style={{color:"var(--muted)",fontSize:14}}>Invitá amigos para que publiquen.</div>
+            </div>
+          ):filtered.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike}/>)
+        ):(
+          filteredProfiles.length===0?(
+            <div style={{textAlign:"center",padding:"60px 20px"}}>
+              <div style={{fontSize:48,marginBottom:12}}>👥</div>
+              <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>Sin usuarios</div>
+            </div>
+          ):filteredProfiles.map(profile=>(
+            <div key={profile.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12}}>
+              <Avatar size={44} img={profile.avatar_url}/>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:14}}>{profile.full_name||"Usuario"}</div>
+                <div style={{fontSize:12,color:"var(--muted)"}}>{profile.username?`@${profile.username}`:""} {profile.is_private?"🔒 Privado":"🌍 Público"}</div>
+              </div>
+              <button onClick={()=>handleFollow(profile.id)} style={followStyle(profile.id)}>{followLabel(profile.id)}</button>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -600,6 +734,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
   const [imagePreview, setImagePreview] = useState<string|null>(null);
   const [gradient, setGradient] = useState(GRADIENTS[0]);
   const [caption, setCaption] = useState("");
+  const [visibility, setVisibility] = useState<"public"|"friends">("public");
   const [challengeType, setChallengeType] = useState<"trivia"|"photo">("trivia");
   const [prompt, setPrompt] = useState("");
   const [answer, setAnswer] = useState("");
@@ -629,7 +764,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
       }
       const data = await sbFetch("posts", {
         method: "POST",
-        body: JSON.stringify({ user_id:user.id, emoji:"🖼️", caption, gradient, image_url, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3 }),
+        body: JSON.stringify({ user_id:user.id, emoji:"🖼️", caption, gradient, image_url, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3, visibility }),
         headers: { Prefer:"return=representation" }
       });
       if (data && !data.error && !data.message) onPublished();
@@ -711,6 +846,21 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
             style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
         </div>
 
+        {/* Visibilidad */}
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>VISIBILIDAD</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {([["public","🌍","Público","Todos pueden verlo"],["friends","👥","Solo amigos","Solo tus seguidores"]] as [string,string,string,string][]).map(([v,e,l,d])=>(
+              <button key={v} onClick={()=>setVisibility(v as "public"|"friends")}
+                style={{padding:"12px",background:visibility===v?"rgba(232,255,71,.08)":"var(--surface2)",border:`1.5px solid ${visibility===v?"var(--accent)":"var(--border2)"}`,borderRadius:12,cursor:"pointer",textAlign:"left"}}>
+                <div style={{fontSize:20,marginBottom:4}}>{e}</div>
+                <div style={{fontSize:13,fontWeight:600,color:visibility===v?"var(--accent)":"var(--text)"}}>{l}</div>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{d}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {error&&<div style={{padding:"12px",borderRadius:12,background:"rgba(255,107,107,.08)",border:"1px solid #FF6B6B",fontSize:13,color:"#FF6B6B"}}>{error}</div>}
 
         <button onClick={handlePublish} disabled={!canPublish||publishing}
@@ -729,19 +879,26 @@ export default function App() {
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
   const [likedIds, setLikedIds] = useState<string[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [followingIds, setFollowingIds] = useState<string[]>([]); // accepted follows
   const [activeNav, setActiveNav] = useState("feed");
   const [challengePost, setChallengePost] = useState<Post|null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
 
   useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user) setUser(s.user); setLoading(false); }); },[]);
-  useEffect(()=>{ if(user){ loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); } },[user]);
+  useEffect(()=>{ if(user){ loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); loadFollowing(); } },[user]);
 
   async function loadPosts() {
     setPostsLoading(true);
     try {
-      const data = await sbFetch("posts?select=*,profile:profiles(id,full_name,username,avatar_url)&order=created_at.desc");
+      const data = await sbFetch("posts?select=*,profile:profiles(id,full_name,username,avatar_url,is_private)&order=created_at.desc");
       if (Array.isArray(data)) setPosts(data);
     } finally { setPostsLoading(false); }
+  }
+
+  async function loadFollowing() {
+    if (!user) return;
+    const data = await sbFetch(`follows?follower_id=eq.${user.id}&status=eq.accepted&select=following_id`);
+    if (Array.isArray(data)) setFollowingIds(data.map((f:{following_id:string})=>f.following_id));
   }
 
   async function loadUnlocks() {
@@ -759,16 +916,16 @@ export default function App() {
   async function loadPendingCount() {
     if (!user) return;
     let count = 0;
-    // Unread notifications for me
     const notifs = await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false&select=id`);
     if (Array.isArray(notifs)) count += notifs.length;
-    // Pending reviews of my posts
     const myPosts = await sbFetch(`posts?user_id=eq.${user.id}&select=id`);
     if (Array.isArray(myPosts)&&myPosts.length>0) {
       const ids = myPosts.map((p:{id:string})=>p.id).join(",");
       const pending = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${ids})&select=id`);
       if (Array.isArray(pending)) count += pending.length;
     }
+    const followReqs = await sbFetch(`follows?following_id=eq.${user.id}&status=eq.pending&select=id`);
+    if (Array.isArray(followReqs)) count += followReqs.length;
     setPendingCount(count);
   }
 
@@ -802,10 +959,19 @@ export default function App() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    setUser(null); setPosts([]); setUnlockedIds([]); setLikedIds([]); setActiveNav("feed");
+    setUser(null); setPosts([]); setUnlockedIds([]); setLikedIds([]); setFollowingIds([]); setActiveNav("feed");
+  }
+
+  function canSeePost(post: Post): boolean {
+    if (post.user_id === user!.id) return true; // own posts always visible
+    const isFollowing = followingIds.includes(post.user_id);
+    if (post.profile?.is_private && !isFollowing) return false; // private account
+    if (post.visibility === "friends" && !isFollowing) return false; // friends-only post
+    return true;
   }
 
   const postsWithUnlocked = posts.map(p=>({...p, unlocked:unlockedIds.includes(p.id)}));
+  const feedPosts = postsWithUnlocked.filter(canSeePost);
 
   if (loading) return (<><GlobalStyles/><div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><Spinner/><div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800}}>Te<span style={{color:"var(--accent)"}}>Reto</span></div></div></>);
 
@@ -825,16 +991,16 @@ export default function App() {
               </div>
               {postsLoading?<div style={{display:"flex",justifyContent:"center",padding:"60px 0"}}><Spinner/></div>:(
                 <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:16}}>
-                  {postsWithUnlocked.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike}/>)}
-                  {postsWithUnlocked.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>No hay posts todavía.</div>}
+                  {feedPosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike}/>)}
+                  {feedPosts.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>No hay posts todavía. ¡Seguí a alguien o publicá tu primer reto!</div>}
                 </div>
               )}
             </div>
           )}
-          {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id}/>}
+          {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing}/>}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
-          {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); }}/>}
-          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }}/>}
+          {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }}/>}
+          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing}/>}
           <BottomNav active={activeNav} onChange={setActiveNav} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
         </>
