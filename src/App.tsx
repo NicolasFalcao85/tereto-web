@@ -5,7 +5,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_XP97uQLTvyBvGvhVTApwDA_V0g1hAmq";
 
 interface User { id: string; email: string; user_metadata: { full_name?: string; avatar_url?: string }; }
 interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; }
-interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; challenge_type: "trivia"|"photo"; prompt: string; correct_answer: string|null; hint: string|null; max_attempts: number; created_at: string; profile?: Profile; unlocked?: boolean; likes_count?: number; }
+interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; correct_answer: string|null; hint: string|null; max_attempts: number; created_at: string; profile?: Profile; unlocked?: boolean; likes_count?: number; }
 
 function getToken() { return localStorage.getItem("sb_access_token") ?? ""; }
 
@@ -29,6 +29,18 @@ async function sbFetch(path: string, opts: RequestInit = {}) {
   return res.json();
 }
 
+async function uploadImage(userId: string, file: File): Promise<string|null> {
+  const ext = file.name.split(".").pop();
+  const path = `${userId}/${Date.now()}.${ext}`;
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/posts/${path}`, {
+    method: "POST",
+    headers: { apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${getToken()}`, "Content-Type": file.type },
+    body: file,
+  });
+  if (!res.ok) return null;
+  return `${SUPABASE_URL}/storage/v1/object/public/posts/${path}`;
+}
+
 const GlobalStyles = () => (<style>{`
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -46,8 +58,7 @@ const GlobalStyles = () => (<style>{`
 
 function fmt(n: number) { return n>=1000?(n/1000).toFixed(1)+"k":String(n); }
 function timeAgo(d: string) { const m=Math.floor((Date.now()-new Date(d).getTime())/60000); if(m<60) return `hace ${m}m`; const h=Math.floor(m/60); if(h<24) return `hace ${h}h`; return `hace ${Math.floor(h/24)}d`; }
-
-function Spinner() { return <div style={{width:28,height:28,border:"3px solid var(--border2)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>; }
+function Spinner({ size=28 }: { size?: number }) { return <div style={{width:size,height:size,border:"3px solid var(--border2)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>; }
 function Avatar({ size=36, img, emoji="👤" }: { size?: number; img?: string|null; emoji?: string }) {
   return <div style={{width:size,height:size,borderRadius:"50%",background:"var(--surface2)",border:"1.5px solid var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.42,flexShrink:0,overflow:"hidden"}}>{img?<img src={img} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:emoji}</div>;
 }
@@ -69,7 +80,7 @@ function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
           <p style={{color:"var(--muted)",fontSize:14,marginBottom:28,lineHeight:1.5}}>Creá tu cuenta o iniciá sesión. Es gratis.</p>
           <button onClick={async()=>{setLoading(true);await supabase.auth.signInWithGoogle();}} disabled={loading}
             style={{width:"100%",padding:"14px 20px",background:loading?"var(--surface2)":"#fff",border:"1.5px solid var(--border2)",borderRadius:14,cursor:loading?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:12,fontFamily:"var(--font-b)",fontSize:15,fontWeight:600,color:loading?"var(--muted)":"#1a1a1a",transition:"all .2s",marginBottom:16}}>
-            {loading?<Spinner/>:<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>}
+            {loading?<Spinner size={20}/>:<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>}
             {loading?"Conectando...":"Continuar con Google"}
           </button>
           <button disabled style={{width:"100%",padding:"14px 20px",background:"var(--surface2)",border:"1.5px solid var(--border)",borderRadius:14,cursor:"not-allowed",fontFamily:"var(--font-b)",fontSize:15,fontWeight:500,color:"var(--muted)"}}>
@@ -83,10 +94,13 @@ function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
 }
 
 function LockedOverlay({ post, onTap }: { post: Post; onTap: () => void }) {
+  const bg = post.image_url
+    ? `url(${post.image_url})`
+    : post.gradient;
   return (
     <div onClick={onTap} style={{position:"relative",borderRadius:16,overflow:"hidden",cursor:"pointer",userSelect:"none"}}>
-      <div style={{height:280,background:post.gradient,display:"flex",alignItems:"center",justifyContent:"center",fontSize:80,filter:"blur(18px)",transform:"scale(1.05)"}}>{post.emoji}</div>
-      <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(10,10,14,.3) 0%,rgba(10,10,14,.7) 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10}}>
+      <div style={{height:300,background:bg,backgroundSize:"cover",backgroundPosition:"center",display:"flex",alignItems:"center",justifyContent:"center",fontSize:80,filter:"blur(18px)",transform:"scale(1.08)"}}>{!post.image_url&&post.emoji}</div>
+      <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(10,10,14,.2) 0%,rgba(10,10,14,.65) 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10}}>
         <div style={{width:52,height:52,borderRadius:"50%",background:"rgba(232,255,71,.12)",border:"2px solid var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,animation:"unlockPulse 2s ease-in-out infinite"}}>🔒</div>
         <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"#fff",textAlign:"center",padding:"0 24px"}}>Superá el reto para ver el contenido</div>
         <div style={{background:"var(--accent)",color:"#0A0A0E",padding:"6px 16px",borderRadius:99,fontWeight:700,fontSize:13,fontFamily:"var(--font-d)"}}>Ver reto →</div>
@@ -98,7 +112,10 @@ function LockedOverlay({ post, onTap }: { post: Post; onTap: () => void }) {
 function UnlockedContent({ post }: { post: Post }) {
   return (
     <div style={{borderRadius:16,overflow:"hidden",animation:"blurIn .6s cubic-bezier(.22,1,.36,1) both",position:"relative"}}>
-      <div style={{height:280,background:post.gradient,display:"flex",alignItems:"center",justifyContent:"center",fontSize:80}}>{post.emoji}</div>
+      {post.image_url
+        ? <img src={post.image_url} style={{width:"100%",height:300,objectFit:"cover",display:"block"}} alt={post.caption}/>
+        : <div style={{height:300,background:post.gradient,display:"flex",alignItems:"center",justifyContent:"center",fontSize:80}}>{post.emoji}</div>
+      }
       <div style={{position:"absolute",bottom:12,left:12,background:"rgba(10,10,14,.75)",backdropFilter:"blur(8px)",borderRadius:10,padding:"5px 12px",display:"flex",alignItems:"center",gap:6}}>
         <span style={{fontSize:12}}>🔓</span><span style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>Desbloqueado</span>
       </div>
@@ -159,7 +176,7 @@ function ChallengeModal({ post, onClose, onUnlock }: { post: Post; onClose: ()=>
     } else { if (!photoName) return; setStatus("success"); setTimeout(()=>onUnlock(post.id),1400); }
   }
 
-  const canSubmit = post.challenge_type==="trivia" ? attempts>0&&answer.trim() : photoName;
+  const canSubmit = post.challenge_type==="trivia" ? attempts>0&&!!answer.trim() : !!photoName;
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
@@ -201,7 +218,7 @@ function ChallengeModal({ post, onClose, onUnlock }: { post: Post; onClose: ()=>
               </label>
             )}
             <button onClick={handleSubmit} disabled={!canSubmit}
-              style={{width:"100%",padding:"15px",background:canSubmit?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canSubmit?"#0A0A0E":"var(--muted)",transition:"all .2s"}}>
+              style={{width:"100%",padding:"15px",background:canSubmit?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:canSubmit?"pointer":"default",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canSubmit?"#0A0A0E":"var(--muted)",transition:"all .2s"}}>
               {attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":"Responder →"}
             </button>
           </>
@@ -262,10 +279,10 @@ const GRADIENTS = [
   "linear-gradient(135deg,#43e97b,#38f9d7)",
   "linear-gradient(135deg,#30cfd0,#667eea)",
 ];
-const EMOJIS = ["🌊","🏔️","🗼","🍕","🎨","🌅","🎸","🧁","✈️","🏆","🔥","💫","🌸","🎯","💎","🦋"];
 
 function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }) {
-  const [emoji, setEmoji] = useState("🌊");
+  const [imageFile, setImageFile] = useState<File|null>(null);
+  const [imagePreview, setImagePreview] = useState<string|null>(null);
   const [gradient, setGradient] = useState(GRADIENTS[0]);
   const [caption, setCaption] = useState("");
   const [challengeType, setChallengeType] = useState<"trivia"|"photo">("trivia");
@@ -275,18 +292,32 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
 
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = ev => setImagePreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  }
+
   const canPublish = caption.trim() && prompt.trim() && (challengeType==="photo" || answer.trim());
 
   async function handlePublish() {
     if (!canPublish || publishing) return;
     setPublishing(true); setError("");
     try {
+      let image_url: string|null = null;
+      if (imageFile) {
+        image_url = await uploadImage(user.id, imageFile);
+        if (!image_url) { setError("Error al subir la imagen. Intentá de nuevo."); setPublishing(false); return; }
+      }
       const data = await sbFetch("posts", {
         method: "POST",
-        body: JSON.stringify({ user_id:user.id, emoji, caption, gradient, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3 }),
+        body: JSON.stringify({ user_id:user.id, emoji:"🖼️", caption, gradient, image_url, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3 }),
         headers: { Prefer:"return=representation" }
       });
-      if (data && !data.error) onPublished();
+      if (data && !data.error && !data.message) onPublished();
       else setError("Error al publicar. Intentá de nuevo.");
     } catch { setError("Error al publicar. Intentá de nuevo."); }
     finally { setPublishing(false); }
@@ -299,33 +330,37 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
       </div>
       <div style={{padding:"16px 12px",display:"flex",flexDirection:"column",gap:16}}>
 
-        {/* Preview */}
-        <div style={{borderRadius:16,overflow:"hidden",position:"relative",height:200,background:gradient,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div style={{fontSize:72,filter:"blur(14px)",transform:"scale(1.1)"}}>{emoji}</div>
-          <div style={{position:"absolute",inset:0,background:"rgba(10,10,14,.55)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}>
-            <div style={{fontSize:28}}>🔒</div>
-            <div style={{fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#fff"}}>Preview del contenido bloqueado</div>
-          </div>
-        </div>
-
-        {/* Emoji */}
-        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
-          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>EMOJI DEL CONTENIDO</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {EMOJIS.map(e=>(
-              <button key={e} onClick={()=>setEmoji(e)} style={{width:40,height:40,borderRadius:10,border:`2px solid ${emoji===e?"var(--accent)":"var(--border2)"}`,background:emoji===e?"rgba(232,255,71,.1)":"var(--surface2)",fontSize:20,cursor:"pointer",transition:"all .15s"}}>{e}</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Gradiente */}
-        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
-          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>COLOR DE FONDO</div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {GRADIENTS.map(g=>(
-              <button key={g} onClick={()=>setGradient(g)} style={{width:36,height:36,borderRadius:10,background:g,border:`3px solid ${gradient===g?"var(--accent)":"transparent"}`,cursor:"pointer",transition:"all .15s"}}/>
-            ))}
-          </div>
+        {/* Foto del contenido */}
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden"}}>
+          <label style={{display:"block",cursor:"pointer"}}>
+            {imagePreview ? (
+              <div style={{position:"relative"}}>
+                <img src={imagePreview} style={{width:"100%",height:240,objectFit:"cover",display:"block",filter:"blur(16px)",transform:"scale(1.05)"}} alt="preview"/>
+                <div style={{position:"absolute",inset:0,background:"rgba(10,10,14,.5)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
+                  <div style={{fontSize:28}}>🔒</div>
+                  <div style={{fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#fff"}}>Así se verá blureada</div>
+                  <div style={{fontSize:12,color:"var(--muted)"}}>Tocá para cambiar la foto</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{height:200,background:gradient,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10}}>
+                <div style={{fontSize:36}}>📷</div>
+                <div style={{fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:"#fff"}}>Subí tu foto</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Se va a mostrar blureada hasta que superen el reto</div>
+              </div>
+            )}
+            <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageChange}/>
+          </label>
+          {!imagePreview&&(
+            <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
+              <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>O elegí un color de fondo:</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {GRADIENTS.map(g=>(
+                  <button key={g} onClick={()=>setGradient(g)} style={{width:32,height:32,borderRadius:8,background:g,border:`3px solid ${gradient===g?"var(--accent)":"transparent"}`,cursor:"pointer",transition:"all .15s"}}/>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Caption */}
@@ -365,7 +400,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
 
         <button onClick={handlePublish} disabled={!canPublish||publishing}
           style={{width:"100%",padding:"16px",background:canPublish&&!publishing?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:canPublish&&!publishing?"pointer":"default",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canPublish&&!publishing?"#0A0A0E":"var(--muted)",transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
-          {publishing?<><Spinner/> Publicando...</>:"Publicar reto ⚡"}
+          {publishing?<><Spinner size={20}/> Publicando...</>:"Publicar reto ⚡"}
         </button>
       </div>
     </div>
@@ -455,8 +490,8 @@ export default function App() {
               )}
             </div>
           )}
-          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout}/>}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
+          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout}/>}
           {["explore","notifs"].includes(activeNav)&&(
             <div style={{maxWidth:520,margin:"0 auto",padding:"80px 24px",textAlign:"center"}}>
               <div style={{fontSize:52,marginBottom:16}}>{activeNav==="explore"?"🔍":"🔔"}</div>
