@@ -445,6 +445,74 @@ function BottomNav({ active, onChange, pendingCount }: { active: string; onChang
   );
 }
 
+function SocialLists({ userId, followingIds, onFollowChange }: { userId: string; followingIds: string[]; onFollowChange: ()=>void }) {
+  const [tab, setTab] = useState<"following"|"followers">("following");
+  const [following, setFollowing] = useState<Profile[]>([]);
+  const [followers, setFollowers] = useState<{profile: Profile; status: string}[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(()=>{ loadData(); },[tab]);
+
+  async function loadData() {
+    setLoading(true);
+    if (tab==="following") {
+      const data = await sbFetch(`follows?follower_id=eq.${userId}&status=eq.accepted&select=profile:profiles!follows_following_id_fkey(id,full_name,username,avatar_url,is_private)`);
+      if (Array.isArray(data)) setFollowing(data.map((f:{profile:Profile})=>f.profile).filter(Boolean));
+    } else {
+      const data = await sbFetch(`follows?following_id=eq.${userId}&status=eq.accepted&select=status,profile:profiles!follows_follower_id_fkey(id,full_name,username,avatar_url,is_private)`);
+      if (Array.isArray(data)) setFollowers(data.filter((f:{profile:Profile})=>f.profile));
+    }
+    setLoading(false);
+  }
+
+  async function handleUnfollow(profileId: string) {
+    await sbFetch(`follows?follower_id=eq.${userId}&following_id=eq.${profileId}`, { method:"DELETE" });
+    setFollowing(prev=>prev.filter(p=>p.id!==profileId));
+    onFollowChange();
+  }
+
+  const list = tab==="following" ? following : followers.map(f=>f.profile);
+
+  return (
+    <div style={{margin:"12px 16px 0"}}>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        {([["following","Siguiendo"],["followers","Seguidores"]] as [string,string][]).map(([t,l])=>(
+          <button key={t} onClick={()=>setTab(t as "following"|"followers")}
+            style={{padding:"7px 16px",borderRadius:99,border:`1.5px solid ${tab===t?"var(--accent)":"var(--border2)"}`,background:tab===t?"rgba(232,255,71,.08)":"none",cursor:"pointer",fontFamily:"var(--font-b)",fontSize:13,fontWeight:600,color:tab===t?"var(--accent)":"var(--muted)"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {loading?<div style={{display:"flex",justifyContent:"center",padding:"20px 0"}}><Spinner/></div>:
+       list.length===0?(
+        <div style={{textAlign:"center",padding:"24px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14}}>
+          <div style={{fontSize:32,marginBottom:8}}>{tab==="following"?"👀":"👥"}</div>
+          <div style={{fontSize:13,color:"var(--muted)"}}>{tab==="following"?"No seguís a nadie todavía":"Nadie te sigue todavía"}</div>
+        </div>
+       ):(
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {list.map(profile=>profile&&(
+            <div key={profile.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:"12px",display:"flex",alignItems:"center",gap:10}}>
+              <Avatar size={38} img={profile.avatar_url}/>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:13}}>{profile.full_name||"Usuario"}</div>
+                <div style={{fontSize:11,color:"var(--muted)"}}>{profile.username?`@${profile.username}`:""} {profile.is_private?"🔒":""}</div>
+              </div>
+              {tab==="following"&&(
+                <button onClick={()=>handleUnfollow(profile.id)}
+                  style={{padding:"6px 12px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",fontSize:12,color:"var(--muted)",fontFamily:"var(--font-b)"}}>
+                  Dejar de seguir
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+       )
+      }
+    </div>
+  );
+}
+
 function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void }) {
   const myPosts = posts.filter(p=>p.user_id===user.id);
   const [username, setUsername] = useState("");
@@ -592,6 +660,9 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
           </div>
         ))}
       </div>
+
+      {/* Following / Followers */}
+      <SocialLists userId={user.id} followingIds={followingIds} onFollowChange={onFollowChange}/>
 
       {/* My posts */}
       {myPosts.length>0&&(
