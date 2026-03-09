@@ -440,34 +440,150 @@ function BottomNav({ active, onChange, pendingCount }: { active: string; onChang
   );
 }
 
-function ProfilePage({ user, posts, unlockedIds, onLogout }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void }) {
+function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void }) {
+  const myPosts = posts.filter(p=>p.user_id===user.id);
+  const [username, setUsername] = useState("");
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [usernameError, setUsernameError] = useState("");
+  const [savingUsername, setSavingUsername] = useState(false);
+  const [copied, setCopied] = useState<string|null>(null);
+
+  useEffect(()=>{
+    sbFetch(`profiles?id=eq.${user.id}&select=username`).then(data=>{
+      if (Array.isArray(data)&&data.length>0&&data[0].username) setUsername(data[0].username);
+    });
+  },[user.id]);
+
+  async function handleSaveUsername() {
+    const val = usernameInput.trim().toLowerCase().replace(/[^a-z0-9_.]/g,"");
+    if (!val||val.length<3) { setUsernameError("Mínimo 3 caracteres (letras, números, _ o .)"); return; }
+    setSavingUsername(true); setUsernameError("");
+    const data = await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({username:val}), headers:{Prefer:"return=minimal"} });
+    if (data===null) { setUsername(val); setEditingUsername(false); }
+    else setUsernameError("Ese username ya está en uso. Probá otro.");
+    setSavingUsername(false);
+  }
+
+  async function handleDeletePost(postId: string) {
+    if (!confirm("¿Eliminar este post?")) return;
+    await sbFetch(`posts?id=eq.${postId}`, { method:"DELETE" });
+    onPostDeleted();
+  }
+
+  function handleShare(postId: string) {
+    const url = `${window.location.origin}?post=${postId}`;
+    navigator.clipboard.writeText(url).then(()=>{ setCopied(postId); setTimeout(()=>setCopied(null),2000); });
+  }
+
   return (
     <div style={{maxWidth:520,margin:"0 auto",padding:"0 0 80px",animation:"fadeUp .35s ease both"}}>
-      <div style={{padding:"52px 20px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{padding:"52px 20px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <h2 style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800}}>Mi perfil</h2>
         <button onClick={onLogout} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"var(--muted)",fontSize:13,fontFamily:"var(--font-b)"}}>Salir</button>
       </div>
-      <div style={{margin:"0 16px",padding:"24px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:20,display:"flex",gap:16,alignItems:"center"}}>
-        <Avatar size={64} img={user.user_metadata?.avatar_url}/>
-        <div>
-          <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800}}>{user.user_metadata?.full_name||user.email?.split("@")[0]||"Usuario"}</div>
-          <div style={{fontSize:13,color:"var(--muted)",marginTop:3}}>{user.email}</div>
+
+      {/* Info */}
+      <div style={{margin:"0 16px",padding:"20px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:20}}>
+        <div style={{display:"flex",gap:14,alignItems:"center",marginBottom:14}}>
+          <Avatar size={60} img={user.user_metadata?.avatar_url}/>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800}}>{user.user_metadata?.full_name||user.email?.split("@")[0]}</div>
+            <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>{user.email}</div>
+          </div>
         </div>
+        {editingUsername?(
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"flex",gap:8}}>
+              <input value={usernameInput} onChange={e=>setUsernameInput(e.target.value)} placeholder="tu_username" autoFocus
+                style={{flex:1,padding:"10px 12px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:10,color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+              <button onClick={handleSaveUsername} disabled={savingUsername}
+                style={{padding:"10px 16px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#0A0A0E"}}>
+                {savingUsername?"...":"Guardar"}
+              </button>
+              <button onClick={()=>setEditingUsername(false)}
+                style={{padding:"10px 14px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontSize:13,fontFamily:"var(--font-b)"}}>✕</button>
+            </div>
+            {usernameError&&<div style={{fontSize:12,color:"#FF6B6B"}}>{usernameError}</div>}
+          </div>
+        ):(
+          <button onClick={()=>{ setUsernameInput(username); setEditingUsername(true); }}
+            style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"8px 14px",cursor:"pointer",color:username?"var(--accent)":"var(--muted)",fontSize:13,fontFamily:"var(--font-b)",width:"100%",textAlign:"left"}}>
+            {username?`@${username}`:"+ Elegir @username"}
+          </button>
+        )}
       </div>
-      <div style={{margin:"16px 16px 0",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        {([["🔓","Desbloqueados",unlockedIds.length],["🔒","Pendientes",posts.length-unlockedIds.length],["⚡","Puntos",unlockedIds.length*150],["🏆","Nivel",Math.floor(unlockedIds.length/3)+1]] as [string,string,number][]).map(([e,l,v])=>(
-          <div key={l} style={{padding:"16px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,textAlign:"center"}}>
-            <div style={{fontSize:24,marginBottom:6}}>{e}</div>
+
+      {/* Stats */}
+      <div style={{margin:"12px 16px 0",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {([["🔓","Desbloqueados",unlockedIds.length],["📸","Mis posts",myPosts.length],["⚡","Puntos",unlockedIds.length*150],["🏆","Nivel",Math.floor(unlockedIds.length/3)+1]] as [string,string,number][]).map(([e,l,v])=>(
+          <div key={l} style={{padding:"14px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,textAlign:"center"}}>
+            <div style={{fontSize:22,marginBottom:4}}>{e}</div>
             <div style={{fontFamily:"var(--font-d)",fontSize:20,fontWeight:800}}>{v}</div>
-            <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>{l}</div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{l}</div>
           </div>
         ))}
+      </div>
+
+      {/* My posts */}
+      {myPosts.length>0&&(
+        <div style={{margin:"16px 16px 0"}}>
+          <div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,marginBottom:10}}>Mis retos publicados</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {myPosts.map(post=>(
+              <div key={post.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,overflow:"hidden"}}>
+                <div style={{height:80,background:post.image_url?`url(${post.image_url})`:(post.gradient||"var(--surface2)"),backgroundSize:"cover",backgroundPosition:"center",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,filter:post.image_url?"blur(4px)":"none"}}>{!post.image_url&&post.emoji}</div>
+                <div style={{padding:"10px 12px"}}>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>{post.caption}</div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>{post.challenge_type==="trivia"?"🧠":"📸"} {post.prompt.slice(0,50)}{post.prompt.length>50?"…":""}</div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>handleShare(post.id)}
+                      style={{flex:1,padding:"8px",background:"rgba(232,255,71,.08)",border:"1px solid rgba(232,255,71,.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,color:"var(--accent)",fontFamily:"var(--font-b)"}}>
+                      {copied===post.id?"✅ Copiado!":"↗ Compartir"}
+                    </button>
+                    <button onClick={()=>handleDeletePost(post.id)}
+                      style={{padding:"8px 12px",background:"rgba(255,107,107,.06)",border:"1px solid rgba(255,107,107,.2)",borderRadius:8,cursor:"pointer",fontSize:12,color:"#FF6B6B",fontFamily:"var(--font-b)"}}>
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId }: { posts: Post[]; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; currentUserId: string }) {
+  const [search, setSearch] = useState("");
+  const otherPosts = posts.filter(p=>p.user_id!==currentUserId);
+  const filtered = search.trim()
+    ? otherPosts.filter(p=>p.caption?.toLowerCase().includes(search.toLowerCase())||p.prompt?.toLowerCase().includes(search.toLowerCase())||p.profile?.full_name?.toLowerCase().includes(search.toLowerCase()))
+    : otherPosts;
+
+  return (
+    <div style={{maxWidth:520,margin:"0 auto",padding:"0 0 80px",animation:"fadeUp .35s ease both"}}>
+      <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(10,10,14,.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid var(--border)",padding:"16px 20px"}}>
+        <h2 style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:12}}>Explorar 🔍</h2>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar retos, usuarios..."
+          style={{width:"100%",padding:"11px 14px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+      </div>
+      <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:16}}>
+        {filtered.length===0?(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:48,marginBottom:12}}>🔍</div>
+            <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>{search?"Sin resultados":"Sin posts de otros usuarios"}</div>
+            <div style={{color:"var(--muted)",fontSize:14}}>Invitá amigos para que publiquen sus retos.</div>
+          </div>
+        ):filtered.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike}/>)}
       </div>
     </div>
   );
 }
 
-const GRADIENTS = [
+
   "linear-gradient(135deg,#667eea,#f093fb)",
   "linear-gradient(135deg,#4facfe,#00f2fe)",
   "linear-gradient(135deg,#fa709a,#fee140)",
@@ -714,16 +830,10 @@ export default function App() {
               )}
             </div>
           )}
+          {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id}/>}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
           {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); }}/>}
-          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout}/>}
-          {activeNav==="explore"&&(
-            <div style={{maxWidth:520,margin:"0 auto",padding:"80px 24px",textAlign:"center"}}>
-              <div style={{fontSize:52,marginBottom:16}}>🔍</div>
-              <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:10}}>Explorar</div>
-              <div style={{color:"var(--muted)",fontSize:14}}>Próximamente.</div>
-            </div>
-          )}
+          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }}/>}
           <BottomNav active={activeNav} onChange={setActiveNav} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
         </>
