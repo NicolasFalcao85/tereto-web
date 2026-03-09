@@ -252,6 +252,126 @@ function ProfilePage({ user, posts, unlockedIds, onLogout }: { user: User; posts
   );
 }
 
+const GRADIENTS = [
+  "linear-gradient(135deg,#667eea,#f093fb)",
+  "linear-gradient(135deg,#4facfe,#00f2fe)",
+  "linear-gradient(135deg,#fa709a,#fee140)",
+  "linear-gradient(135deg,#f7971e,#ffd200)",
+  "linear-gradient(135deg,#a18cd1,#fbc2eb)",
+  "linear-gradient(135deg,#f093fb,#f5576c)",
+  "linear-gradient(135deg,#43e97b,#38f9d7)",
+  "linear-gradient(135deg,#30cfd0,#667eea)",
+];
+const EMOJIS = ["🌊","🏔️","🗼","🍕","🎨","🌅","🎸","🧁","✈️","🏆","🔥","💫","🌸","🎯","💎","🦋"];
+
+function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }) {
+  const [emoji, setEmoji] = useState("🌊");
+  const [gradient, setGradient] = useState(GRADIENTS[0]);
+  const [caption, setCaption] = useState("");
+  const [challengeType, setChallengeType] = useState<"trivia"|"photo">("trivia");
+  const [prompt, setPrompt] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [hint, setHint] = useState("");
+  const [publishing, setPublishing] = useState(false);
+  const [error, setError] = useState("");
+
+  const canPublish = caption.trim() && prompt.trim() && (challengeType==="photo" || answer.trim());
+
+  async function handlePublish() {
+    if (!canPublish || publishing) return;
+    setPublishing(true); setError("");
+    try {
+      const data = await sbFetch("posts", {
+        method: "POST",
+        body: JSON.stringify({ user_id:user.id, emoji, caption, gradient, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3 }),
+        headers: { Prefer:"return=representation" }
+      });
+      if (data && !data.error) onPublished();
+      else setError("Error al publicar. Intentá de nuevo.");
+    } catch { setError("Error al publicar. Intentá de nuevo."); }
+    finally { setPublishing(false); }
+  }
+
+  return (
+    <div style={{maxWidth:520,margin:"0 auto",padding:"0 0 80px",animation:"fadeUp .35s ease both"}}>
+      <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(10,10,14,.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid var(--border)",padding:"16px 20px"}}>
+        <h2 style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800}}>Crear reto ⚡</h2>
+      </div>
+      <div style={{padding:"16px 12px",display:"flex",flexDirection:"column",gap:16}}>
+
+        {/* Preview */}
+        <div style={{borderRadius:16,overflow:"hidden",position:"relative",height:200,background:gradient,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{fontSize:72,filter:"blur(14px)",transform:"scale(1.1)"}}>{emoji}</div>
+          <div style={{position:"absolute",inset:0,background:"rgba(10,10,14,.55)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}>
+            <div style={{fontSize:28}}>🔒</div>
+            <div style={{fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#fff"}}>Preview del contenido bloqueado</div>
+          </div>
+        </div>
+
+        {/* Emoji */}
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>EMOJI DEL CONTENIDO</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {EMOJIS.map(e=>(
+              <button key={e} onClick={()=>setEmoji(e)} style={{width:40,height:40,borderRadius:10,border:`2px solid ${emoji===e?"var(--accent)":"var(--border2)"}`,background:emoji===e?"rgba(232,255,71,.1)":"var(--surface2)",fontSize:20,cursor:"pointer",transition:"all .15s"}}>{e}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Gradiente */}
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>COLOR DE FONDO</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {GRADIENTS.map(g=>(
+              <button key={g} onClick={()=>setGradient(g)} style={{width:36,height:36,borderRadius:10,background:g,border:`3px solid ${gradient===g?"var(--accent)":"transparent"}`,cursor:"pointer",transition:"all .15s"}}/>
+            ))}
+          </div>
+        </div>
+
+        {/* Caption */}
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>DESCRIPCIÓN</div>
+          <textarea value={caption} onChange={e=>setCaption(e.target.value)} placeholder="Describí tu contenido..." rows={2}
+            style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
+        </div>
+
+        {/* Tipo de reto */}
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>TIPO DE RETO</div>
+          <div style={{display:"flex",gap:8}}>
+            {(["trivia","photo"] as const).map(t=>(
+              <button key={t} onClick={()=>setChallengeType(t)}
+                style={{flex:1,padding:"12px",borderRadius:12,border:`1.5px solid ${challengeType===t?"var(--accent)":"var(--border2)"}`,background:challengeType===t?"rgba(232,255,71,.08)":"var(--surface2)",cursor:"pointer",fontFamily:"var(--font-b)",fontSize:14,fontWeight:600,color:challengeType===t?"var(--accent)":"var(--muted)",transition:"all .15s"}}>
+                {t==="trivia"?"🧠 Trivia":"📸 Foto"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Reto */}
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px",display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5}}>EL RETO</div>
+          <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder={challengeType==="trivia"?"Escribí la pregunta...":"Describí qué foto tiene que subir el usuario..."} rows={2}
+            style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
+          {challengeType==="trivia"&&(
+            <input value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Respuesta correcta..."
+              style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+          )}
+          <input value={hint} onChange={e=>setHint(e.target.value)} placeholder="Pista (opcional)..."
+            style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+        </div>
+
+        {error&&<div style={{padding:"12px",borderRadius:12,background:"rgba(255,107,107,.08)",border:"1px solid #FF6B6B",fontSize:13,color:"#FF6B6B"}}>{error}</div>}
+
+        <button onClick={handlePublish} disabled={!canPublish||publishing}
+          style={{width:"100%",padding:"16px",background:canPublish&&!publishing?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:canPublish&&!publishing?"pointer":"default",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canPublish&&!publishing?"#0A0A0E":"var(--muted)",transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          {publishing?<><Spinner/> Publicando...</>:"Publicar reto ⚡"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User|null>(null);
   const [loading, setLoading] = useState(true);
@@ -336,10 +456,11 @@ export default function App() {
             </div>
           )}
           {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout}/>}
-          {["explore","create","notifs"].includes(activeNav)&&(
+          {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
+          {["explore","notifs"].includes(activeNav)&&(
             <div style={{maxWidth:520,margin:"0 auto",padding:"80px 24px",textAlign:"center"}}>
-              <div style={{fontSize:52,marginBottom:16}}>{activeNav==="explore"?"🔍":activeNav==="create"?"⚡":"🔔"}</div>
-              <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:10}}>{activeNav==="explore"?"Explorar":activeNav==="create"?"Crear reto":"Notificaciones"}</div>
+              <div style={{fontSize:52,marginBottom:16}}>{activeNav==="explore"?"🔍":"🔔"}</div>
+              <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:10}}>{activeNav==="explore"?"Explorar":"Notificaciones"}</div>
               <div style={{color:"var(--muted)",fontSize:14}}>Próximamente.</div>
             </div>
           )}
