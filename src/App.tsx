@@ -584,6 +584,7 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId }
 }
 
 
+const GRADIENTS = [
   "linear-gradient(135deg,#667eea,#f093fb)",
   "linear-gradient(135deg,#4facfe,#00f2fe)",
   "linear-gradient(135deg,#fa709a,#fee140)",
