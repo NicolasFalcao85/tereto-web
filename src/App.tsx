@@ -275,7 +275,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
 
 interface PendingUnlock { id: string; photo_url: string; created_at: string; post: Post; challenger: Profile; }
 
-function NotificationsPage({ user, posts }: { user: User; posts: Post[] }) {
+function NotificationsPage({ user, posts, onReviewed }: { user: User; posts: Post[]; onReviewed: ()=>void }) {
   const [pending, setPending] = useState<PendingUnlock[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -298,6 +298,7 @@ function NotificationsPage({ user, posts }: { user: User; posts: Post[] }) {
       headers: { Prefer:"return=minimal" }
     });
     setPending(prev=>prev.filter(u=>u.id!==unlockId));
+    onReviewed();
   }
 
   return (
@@ -580,6 +581,7 @@ export default function App() {
       const photo_url = await uploadImage(user.id, photoFile);
       if (!photo_url) return;
       await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
+      return; // modal se cierra desde el propio ChallengeModal al setStatus("pending")
     } else {
       await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"approved" }), headers:{ Prefer:"return=minimal" } });
       await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({ points:(unlockedIds.length+1)*150 }), headers:{ Prefer:"return=minimal" } });
@@ -631,7 +633,7 @@ export default function App() {
             </div>
           )}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
-          {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts}/>}
+          {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); }}/>}
           {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout}/>}
           {activeNav==="explore"&&(
             <div style={{maxWidth:520,margin:"0 auto",padding:"80px 24px",textAlign:"center"}}>
