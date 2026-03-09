@@ -581,7 +581,6 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
           </div>
         </div>
       )}
-      </div>
 
       {/* Stats */}
       <div style={{margin:"12px 16px 0",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
