@@ -16,7 +16,7 @@ const POST_SELECT = `${POST_COLS},profile:profiles(id,full_name,username,avatar_
 
 const supabase = {
   auth: {
-    async signInWithGoogle() { window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin)}`; },
+    async signInWithGoogle() { window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent("https://tereto-web.vercel.app")}`; },
     async signOut() { await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:"POST", headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${getToken()}` } }); localStorage.removeItem("sb_access_token"); localStorage.removeItem("sb_refresh_token"); },
     async getSession(): Promise<{ user: User; access_token: string }|null> {
       const hash = window.location.hash;
