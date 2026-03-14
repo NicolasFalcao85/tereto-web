@@ -5,7 +5,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_XP97uQLTvyBvGvhVTApwDA_V0g1hAmq";
 
 interface User { id: string; email: string; user_metadata: { full_name?: string; avatar_url?: string }; }
 interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; is_private?: boolean; }
-interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; correct_answer: string|null; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; profile?: Profile; unlocked?: boolean; likes_count?: number; }
+interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; profile?: Profile; unlocked?: boolean; likes_count?: number; }
 interface Follow { id: string; follower_id: string; following_id: string; status: "pending"|"accepted"|"rejected"; created_at: string; profile?: Profile; }
 
 function getToken() { return localStorage.getItem("sb_access_token") ?? ""; }
@@ -236,6 +236,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
   const [attempts, setAttempts] = useState(post.max_attempts);
   const [attemptsLoaded, setAttemptsLoaded] = useState(false);
   const [status, setStatus] = useState<"idle"|"wrong"|"success"|"pending"|"uploading">("idle");
+  const [submitting, setSubmitting] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [photoFile, setPhotoFile] = useState<File|null>(null);
   const [photoPreview, setPhotoPreview] = useState<string|null>(null);
@@ -275,12 +276,18 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
 
   async function handleSubmit() {
     if (post.challenge_type==="trivia") {
-      if (!answer.trim()) return;
-      if (answer.trim().toLowerCase()===post.correct_answer?.toLowerCase()) {
+      if (!answer.trim()||submitting) return;
+      setSubmitting(true);
+      const isCorrect = await sbFetch("rpc/validate_trivia_answer", {
+        method: "POST",
+        body: JSON.stringify({ p_post_id: post.id, p_answer: answer.trim() }),
+      });
+      if (isCorrect===true) {
         setStatus("success"); setTimeout(()=>onUnlock(post.id),1400);
       } else {
         await saveAttempt();
-        setAttempts(a=>a-1); setStatus("wrong"); setTimeout(()=>setStatus("idle"),1200);
+        setAttempts(a=>a-1); setStatus("wrong");
+        setTimeout(()=>{ setStatus("idle"); setSubmitting(false); },1200);
       }
     } else {
       if (!photoFile) return;
@@ -290,7 +297,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
     }
   }
 
-  const canSubmit = post.challenge_type==="trivia" ? attempts>0&&!!answer.trim() : !!photoFile;
+  const canSubmit = post.challenge_type==="trivia" ? attempts>0&&!!answer.trim()&&!submitting : !!photoFile;
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
@@ -366,7 +373,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
             )}
             <button onClick={handleSubmit} disabled={!canSubmit}
               style={{width:"100%",padding:"15px",background:canSubmit?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:canSubmit?"pointer":"default",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canSubmit?"#0A0A0E":"var(--muted)",transition:"all .2s"}}>
-              {attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":post.challenge_type==="photo"?"Enviar foto 📸":"Responder →"}
+              {submitting?"Verificando...":attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":post.challenge_type==="photo"?"Enviar foto 📸":"Responder →"}
             </button>
           </>
         ):null}
@@ -588,7 +595,7 @@ function SocialLists({ userId, followingIds, onFollowChange, onProfileTap }: { u
 function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>void; onSaved: ()=>void }) {
   const [caption, setCaption] = useState(post.caption);
   const [prompt, setPrompt] = useState(post.prompt);
-  const [answer, setAnswer] = useState(post.correct_answer||"");
+  const [answer, setAnswer] = useState(""); // correct_answer no se envía al cliente por seguridad
   const [hint, setHint] = useState(post.hint||"");
   const [visibility, setVisibility] = useState<"public"|"friends">(post.visibility||"public");
   const [saving, setSaving] = useState(false);
@@ -598,7 +605,7 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
     if (!caption.trim()||!prompt.trim()) return;
     setSaving(true);
     const body: Record<string,unknown> = { caption, prompt, hint:hint||null, visibility };
-    if (post.challenge_type==="trivia") body.correct_answer = answer||null;
+    if (post.challenge_type==="trivia" && answer.trim()) body.correct_answer = answer.trim(); // solo actualiza si escribió algo nuevo
     const data = await sbFetch(`posts?id=eq.${post.id}`, { method:"PATCH", body:JSON.stringify(body), headers:{ Prefer:"return=minimal" } });
     if (data===null) { onSaved(); onClose(); } else setError("Error al guardar. Intentá de nuevo.");
     setSaving(false);
@@ -622,8 +629,8 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
           </div>
           {post.challenge_type==="trivia"&&(
             <div>
-              <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:6}}>RESPUESTA CORRECTA</div>
-              <input value={answer} onChange={e=>setAnswer(e.target.value)}
+              <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:6}}>NUEVA RESPUESTA CORRECTA</div>
+              <input value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Dejá vacío para mantener la actual"
                 style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
             </div>
           )}
