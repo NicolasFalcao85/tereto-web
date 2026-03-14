@@ -124,9 +124,64 @@ function UnlockedContent({ post }: { post: Post }) {
   );
 }
 
-function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap }: { post: Post; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; index: number; onProfileTap?: (userId: string)=>void }) {
+function CommentsSection({ postId, currentUser, onProfileTap }: { postId: string; currentUser: User; onProfileTap?: (userId: string)=>void }) {
+  const [comments, setComments] = useState<{id:string;content:string;created_at:string;profile:Profile}[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(()=>{ loadComments(); },[postId]);
+
+  async function loadComments() {
+    const data = await sbFetch(`comments?post_id=eq.${postId}&select=*,profile:profiles(id,full_name,username,avatar_url)&order=created_at.asc`);
+    if (Array.isArray(data)) setComments(data);
+    setLoading(false);
+  }
+
+  async function handleSubmit() {
+    if (!newComment.trim()||submitting) return;
+    setSubmitting(true);
+    await sbFetch("comments", { method:"POST", body:JSON.stringify({ user_id:currentUser.id, post_id:postId, content:newComment.trim() }), headers:{ Prefer:"return=minimal" } });
+    setNewComment(""); await loadComments(); setSubmitting(false);
+  }
+
+  async function handleDelete(commentId: string) {
+    await sbFetch(`comments?id=eq.${commentId}`, { method:"DELETE" });
+    setComments(prev=>prev.filter(c=>c.id!==commentId));
+  }
+
+  return (
+    <div style={{padding:"12px 16px 16px",borderTop:"1px solid var(--border)"}}>
+      <div style={{fontSize:11,color:"var(--muted)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>COMENTARIOS ({loading?"...":comments.length})</div>
+      {!loading&&comments.map(c=>(
+        <div key={c.id} style={{display:"flex",gap:8,marginBottom:10,alignItems:"flex-start"}}>
+          <div onClick={()=>onProfileTap&&c.profile&&onProfileTap(c.profile.id)} style={{cursor:onProfileTap?"pointer":"default",flexShrink:0}}>
+            <Avatar size={26} img={c.profile?.avatar_url}/>
+          </div>
+          <div style={{flex:1,background:"var(--surface2)",borderRadius:10,padding:"7px 10px"}}>
+            <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{c.profile?.full_name||"Usuario"} <span style={{fontWeight:400,color:"var(--muted)"}}>{timeAgo(c.created_at)}</span></div>
+            <div style={{fontSize:13,lineHeight:1.4}}>{c.content}</div>
+          </div>
+          {c.profile?.id===currentUser.id&&<button onClick={()=>handleDelete(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--muted)",fontSize:13,padding:"4px",alignSelf:"flex-start",lineHeight:1}}>✕</button>}
+        </div>
+      ))}
+      <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center"}}>
+        <Avatar size={26} img={currentUser.user_metadata?.avatar_url}/>
+        <input value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSubmit()} placeholder="Comentá..."
+          style={{flex:1,padding:"8px 12px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:10,color:"var(--text)",fontSize:13,fontFamily:"var(--font-b)",outline:"none"}}/>
+        <button onClick={handleSubmit} disabled={!newComment.trim()||submitting}
+          style={{padding:"8px 12px",background:newComment.trim()?"var(--accent)":"var(--surface2)",border:"none",borderRadius:10,cursor:newComment.trim()?"pointer":"default",fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:newComment.trim()?"#0A0A0E":"var(--muted)"}}>
+          {submitting?"...":"→"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap, currentUser }: { post: Post; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; index: number; onProfileTap?: (userId: string)=>void; currentUser?: User }) {
   const liked = likedIds.includes(post.id);
   const [copied, setCopied] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   function handleShare() {
     const url = `${window.location.origin}?post=${post.id}`;
     navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
@@ -162,6 +217,14 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
           </div>
           <span style={{color:"var(--accent)",fontSize:16}}>→</span>
         </div>
+      )}
+      {post.unlocked&&currentUser&&(
+        <>
+          <button onClick={()=>setShowComments(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,padding:"0 16px 14px",color:"var(--muted)",fontFamily:"var(--font-b)",fontSize:13}}>
+            <span style={{fontSize:16}}>💬</span> {showComments?"Ocultar comentarios":"Comentarios"}
+          </button>
+          {showComments&&<CommentsSection postId={post.id} currentUser={currentUser} onProfileTap={onProfileTap}/>}
+        </>
       )}
     </article>
   );
@@ -522,8 +585,81 @@ function SocialLists({ userId, followingIds, onFollowChange, onProfileTap }: { u
   );
 }
 
+function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>void; onSaved: ()=>void }) {
+  const [caption, setCaption] = useState(post.caption);
+  const [prompt, setPrompt] = useState(post.prompt);
+  const [answer, setAnswer] = useState(post.correct_answer||"");
+  const [hint, setHint] = useState(post.hint||"");
+  const [visibility, setVisibility] = useState<"public"|"friends">(post.visibility||"public");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    if (!caption.trim()||!prompt.trim()) return;
+    setSaving(true);
+    const body: Record<string,unknown> = { caption, prompt, hint:hint||null, visibility };
+    if (post.challenge_type==="trivia") body.correct_answer = answer||null;
+    const data = await sbFetch(`posts?id=eq.${post.id}`, { method:"PATCH", body:JSON.stringify(body), headers:{ Prefer:"return=minimal" } });
+    if (data===null) { onSaved(); onClose(); } else setError("Error al guardar. Intentá de nuevo.");
+    setSaving(false);
+  }
+
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)",margin:"0 auto 22px"}}/>
+        <div style={{fontFamily:"var(--font-d)",fontSize:20,fontWeight:800,marginBottom:20}}>Editar reto ✏️</div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div>
+            <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:6}}>DESCRIPCIÓN</div>
+            <textarea value={caption} onChange={e=>setCaption(e.target.value)} rows={2}
+              style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:6}}>EL RETO</div>
+            <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} rows={2}
+              style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
+          </div>
+          {post.challenge_type==="trivia"&&(
+            <div>
+              <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:6}}>RESPUESTA CORRECTA</div>
+              <input value={answer} onChange={e=>setAnswer(e.target.value)}
+                style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+            </div>
+          )}
+          <div>
+            <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:6}}>PISTA (OPCIONAL)</div>
+            <input value={hint} onChange={e=>setHint(e.target.value)} placeholder="Pista..."
+              style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:8}}>VISIBILIDAD</div>
+            <div style={{display:"flex",gap:8}}>
+              {([["public","🌍","Público"],["friends","👥","Solo amigos"]] as [string,string,string][]).map(([v,e,l])=>(
+                <button key={v} onClick={()=>setVisibility(v as "public"|"friends")}
+                  style={{flex:1,padding:"10px",background:visibility===v?"rgba(232,255,71,.08)":"var(--surface2)",border:`1.5px solid ${visibility===v?"var(--accent)":"var(--border2)"}`,borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:600,color:visibility===v?"var(--accent)":"var(--muted)",fontFamily:"var(--font-b)"}}>
+                  {e} {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          {error&&<div style={{padding:"10px",borderRadius:10,background:"rgba(255,107,107,.08)",border:"1px solid #FF6B6B",fontSize:13,color:"#FF6B6B"}}>{error}</div>}
+          <div style={{display:"flex",gap:8,marginTop:4}}>
+            <button onClick={onClose} style={{flex:1,padding:"14px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:14,cursor:"pointer",fontFamily:"var(--font-b)",fontSize:14,color:"var(--muted)"}}>Cancelar</button>
+            <button onClick={handleSave} disabled={saving||!caption.trim()||!prompt.trim()}
+              style={{flex:2,padding:"14px",background:"var(--accent)",border:"none",borderRadius:14,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:"#0A0A0E",opacity:saving||!caption.trim()||!prompt.trim()?0.6:1}}>
+              {saving?"Guardando...":"Guardar cambios"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange, onProfileTap }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
   const myPosts = posts.filter(p=>p.user_id===user.id);
+  const [editingPost, setEditingPost] = useState<Post|null>(null);
   const [username, setUsername] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
@@ -689,6 +825,10 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
                       style={{flex:1,padding:"8px",background:"rgba(232,255,71,.08)",border:"1px solid rgba(232,255,71,.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,color:"var(--accent)",fontFamily:"var(--font-b)"}}>
                       {copied===post.id?"✅ Copiado!":"↗ Compartir"}
                     </button>
+                    <button onClick={()=>setEditingPost(post)}
+                      style={{padding:"8px 12px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",fontSize:12,color:"var(--muted)",fontFamily:"var(--font-b)"}}>
+                      ✏️
+                    </button>
                     <button onClick={()=>handleDeletePost(post.id)}
                       style={{padding:"8px 12px",background:"rgba(255,107,107,.06)",border:"1px solid rgba(255,107,107,.2)",borderRadius:8,cursor:"pointer",fontSize:12,color:"#FF6B6B",fontFamily:"var(--font-b)"}}>
                       🗑
@@ -700,15 +840,17 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
           </div>
         </div>
       )}
+      {editingPost&&<EditPostModal post={editingPost} onClose={()=>setEditingPost(null)} onSaved={()=>{ onPostDeleted(); setEditingPost(null); }}/>}
     </div>
   );
 }
 
-function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, followingIds, onFollowChange, onProfileTap }: { posts: Post[]; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; currentUserId: string; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
+function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, followingIds, onFollowChange, onProfileTap, currentUser }: { posts: Post[]; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; currentUserId: string; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void; currentUser: User }) {
   const [search, setSearch] = useState("");
   const [pendingFollows, setPendingFollows] = useState<string[]>([]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
-  const [tab, setTab] = useState<"posts"|"people">("posts");
+  const [ranking, setRanking] = useState<(Profile&{points:number})[]>([]);
+  const [tab, setTab] = useState<"posts"|"people"|"ranking">("posts");
 
   useEffect(()=>{
     sbFetch(`profiles?id=neq.${currentUserId}&select=id,full_name,username,avatar_url,is_private`).then(data=>{
@@ -716,6 +858,9 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
     });
     sbFetch(`follows?follower_id=eq.${currentUserId}&status=eq.pending&select=following_id`).then(data=>{
       if (Array.isArray(data)) setPendingFollows(data.map((f:{following_id:string})=>f.following_id));
+    });
+    sbFetch(`profiles?select=id,full_name,username,avatar_url,points&order=points.desc&limit=50`).then(data=>{
+      if (Array.isArray(data)) setRanking(data);
     });
   },[currentUserId]);
 
@@ -757,15 +902,15 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar retos, usuarios..."
           style={{width:"100%",padding:"11px 14px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",marginBottom:10}}/>
         <div style={{display:"flex",gap:8}}>
-          {([["posts","Retos"],["people","Personas"]] as [string,string][]).map(([t,l])=>(
-            <button key={t} onClick={()=>setTab(t as "posts"|"people")}
+          {([["posts","Retos"],["people","Personas"],["ranking","🏆 Ranking"]] as [string,string][]).map(([t,l])=>(
+            <button key={t} onClick={()=>setTab(t as "posts"|"people"|"ranking")}
               style={{padding:"7px 16px",borderRadius:99,border:`1.5px solid ${tab===t?"var(--accent)":"var(--border2)"}`,background:tab===t?"rgba(232,255,71,.08)":"none",cursor:"pointer",fontFamily:"var(--font-b)",fontSize:13,fontWeight:600,color:tab===t?"var(--accent)":"var(--muted)"}}>
               {l}
             </button>
           ))}
         </div>
       </div>
-      <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:tab==="people"?10:16}}>
+      <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:tab==="people"||tab==="ranking"?10:16}}>
         {tab==="posts"?(
           filtered.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
@@ -773,8 +918,8 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
               <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>{search?"Sin resultados":"Sin retos públicos aún"}</div>
               <div style={{color:"var(--muted)",fontSize:14}}>Invitá amigos para que publiquen.</div>
             </div>
-          ):filtered.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike} onProfileTap={onProfileTap}/>)
-        ):(
+          ):filtered.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike} onProfileTap={onProfileTap} currentUser={currentUser}/>)
+        ):tab==="people"?(
           filteredProfiles.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
               <div style={{fontSize:48,marginBottom:12}}>👥</div>
@@ -792,6 +937,27 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
               <button onClick={()=>handleFollow(profile.id)} style={followStyle(profile.id)}>{followLabel(profile.id)}</button>
             </div>
           ))
+        ):(
+          ranking.length===0?(
+            <div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>Sin datos de ranking aún.</div>
+          ):ranking.map((profile,i)=>{
+            const level = Math.floor((profile.points||0)/450)+1;
+            const medals = ["🥇","🥈","🥉"];
+            return (
+              <div key={profile.id} onClick={()=>onProfileTap(profile.id)} style={{background:"var(--surface)",border:`1px solid ${i<3?"rgba(232,255,71,.3)":"var(--border)"}`,borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+                <div style={{width:32,textAlign:"center",fontSize:i<3?22:14,fontWeight:700,color:"var(--muted)",flexShrink:0}}>{medals[i]||`#${i+1}`}</div>
+                <Avatar size={40} img={profile.avatar_url}/>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:14}}>{profile.full_name||"Usuario"} {profile.id===currentUserId&&<span style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>(vos)</span>}</div>
+                  <div style={{fontSize:12,color:"var(--muted)"}}>{profile.username?`@${profile.username} · `:""} Nivel {level}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:"var(--accent)"}}>{profile.points||0}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>pts</div>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
@@ -953,6 +1119,34 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
   );
 }
 
+function OnboardingModal({ onDone }: { onDone: ()=>void }) {
+  const [step, setStep] = useState(0);
+  const steps = [
+    { emoji:"⚡", title:"Bienvenido a TeReto", desc:"La red social donde el contenido está bloqueado detrás de retos.\nPara ver una foto, primero tenés que superarlo." },
+    { emoji:"🧠", title:"Tipos de retos", desc:"Trivia: respondé correctamente con hasta 3 intentos.\nFoto: subí la foto que pide el creador y esperá su aprobación." },
+    { emoji:"🔓", title:"Desbloqueá y sumate", desc:"Cada reto superado te da puntos y te sube en el ranking.\nCompartí tus retos con amigos para que se animen." },
+  ];
+  function handleDone() { localStorage.setItem("tereto_onboarded","1"); onDone(); }
+  const s = steps[step];
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(10,10,14,.97)",backdropFilter:"blur(8px)",zIndex:60,display:"flex",alignItems:"center",justifyContent:"center",padding:24,animation:"fadeIn .2s ease both"}}>
+      <div style={{width:"100%",maxWidth:400,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:28,padding:"40px 28px 32px",textAlign:"center",animation:"fadeUp .4s cubic-bezier(.22,1,.36,1) both"}}>
+        <div style={{fontSize:68,marginBottom:16,animation:"pop .5s cubic-bezier(.22,1,.36,1) both"}}>{s.emoji}</div>
+        <div style={{fontFamily:"var(--font-d)",fontSize:24,fontWeight:800,marginBottom:12}}>{s.title}</div>
+        <div style={{color:"var(--muted)",fontSize:15,lineHeight:1.7,marginBottom:32,whiteSpace:"pre-line"}}>{s.desc}</div>
+        <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:24}}>
+          {steps.map((_,i)=><div key={i} style={{width:i===step?24:8,height:8,borderRadius:99,background:i===step?"var(--accent)":"var(--border2)",transition:"all .25s"}}/>)}
+        </div>
+        {step<steps.length-1?(
+          <button onClick={()=>setStep(s=>s+1)} style={{width:"100%",padding:"15px",background:"var(--accent)",border:"none",borderRadius:14,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:"#0A0A0E"}}>Siguiente →</button>
+        ):(
+          <button onClick={handleDone} style={{width:"100%",padding:"15px",background:"var(--accent)",border:"none",borderRadius:14,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:"#0A0A0E"}}>¡Empezar a jugar! ⚡</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PublicProfilePage({ profileId, currentUser, followingIds, onFollowChange, onClose, onOpenChallenge, likedIds, onLike, unlockedIds }: { profileId: string; currentUser: User; followingIds: string[]; onFollowChange: ()=>void; onClose: ()=>void; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; unlockedIds: string[] }) {
   const [profile, setProfile] = useState<Profile|null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -1047,7 +1241,7 @@ function PublicProfilePage({ profileId, currentUser, followingIds, onFollowChang
               ):visiblePosts.length===0?(
                 <div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}>No publicó ningún reto todavía.</div>
               ):(
-                visiblePosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike}/>)
+                visiblePosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike} currentUser={currentUser}/>)
               )}
             </div>
           </>
@@ -1069,6 +1263,7 @@ export default function App() {
   const [challengePost, setChallengePost] = useState<Post|null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
   const [viewingProfileId, setViewingProfileId] = useState<string|null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [sharedPostId, setSharedPostId] = useState<string|null>(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("post");
@@ -1076,7 +1271,7 @@ export default function App() {
     return localStorage.getItem("pending_post_id");
   });
 
-  useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user) setUser(s.user); setLoading(false); }); },[]);
+  useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user){ setUser(s.user); if(!localStorage.getItem("tereto_onboarded")) setShowOnboarding(true); } setLoading(false); }); },[]);
   useEffect(()=>{ if(user){ loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); loadFollowing(); } },[user]);
   useEffect(()=>{
     if (!user || !sharedPostId || postsLoading || posts.length===0) return;
@@ -1197,19 +1392,20 @@ export default function App() {
               </div>
               {postsLoading?<div style={{display:"flex",justifyContent:"center",padding:"60px 0"}}><Spinner/></div>:(
                 <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:16}}>
-                  {feedPosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} onProfileTap={setViewingProfileId}/>)}
+                  {feedPosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} onProfileTap={setViewingProfileId} currentUser={user}/>)}
                   {feedPosts.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>No hay posts todavía. ¡Seguí a alguien o publicá tu primer reto!</div>}
                 </div>
               )}
             </div>
           )}
-          {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
+          {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} currentUser={user}/>}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
           {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }}/>}
           {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
           <BottomNav active={activeNav} onChange={id=>{ setViewingProfileId(null); setActiveNav(id); }} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
           {viewingProfileId&&<PublicProfilePage profileId={viewingProfileId} currentUser={user} followingIds={followingIds} onFollowChange={loadFollowing} onClose={()=>setViewingProfileId(null)} onOpenChallenge={p=>{ setChallengePost(p); }} likedIds={likedIds} onLike={handleLike} unlockedIds={unlockedIds}/>}
+          {showOnboarding&&<OnboardingModal onDone={()=>setShowOnboarding(false)}/>}
         </>
       )}
     </div></>
