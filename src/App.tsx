@@ -10,6 +10,10 @@ interface Follow { id: string; follower_id: string; following_id: string; status
 
 function getToken() { return localStorage.getItem("sb_access_token") ?? ""; }
 
+// Never include correct_answer — validated server-side via validate_trivia_answer RPC
+const POST_COLS = "id,user_id,emoji,caption,gradient,image_url,challenge_type,prompt,hint,max_attempts,created_at,visibility,likes_count";
+const POST_SELECT = `${POST_COLS},profile:profiles(id,full_name,username,avatar_url,is_private)`;
+
 const supabase = {
   auth: {
     async signInWithGoogle() { window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin)}`; },
@@ -402,7 +406,7 @@ function NotificationsPage({ user, posts, onReviewed }: { user: User; posts: Pos
     // Pending reviews of my posts
     const myPostIds = posts.filter(p=>p.user_id===user.id).map(p=>p.id);
     if (myPostIds.length>0) {
-      const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${myPostIds.join(",")})&select=*,post:posts(*),challenger:profiles!unlocks_user_id_fkey(*)`);
+      const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${myPostIds.join(",")})&select=*,post:posts(${POST_COLS}),challenger:profiles!unlocks_user_id_fkey(*)`);
       if (Array.isArray(data)) { setPending(data); if(data.length>0) setTab("review"); }
     }
     setLoading(false);
@@ -1170,7 +1174,7 @@ function PublicProfilePage({ profileId, currentUser, followingIds, onFollowChang
     setLoading(true);
     const [profileData, postsData, followersData, followingCountData] = await Promise.all([
       sbFetch(`profiles?id=eq.${profileId}&select=*`),
-      sbFetch(`posts?user_id=eq.${profileId}&select=*,profile:profiles(id,full_name,username,avatar_url,is_private)&order=created_at.desc`),
+      sbFetch(`posts?user_id=eq.${profileId}&select=${POST_SELECT}&order=created_at.desc`),
       sbFetch(`follows?following_id=eq.${profileId}&status=eq.accepted&select=id`),
       sbFetch(`follows?follower_id=eq.${profileId}&status=eq.accepted&select=id`),
     ]);
@@ -1285,7 +1289,7 @@ export default function App() {
     async function openShared() {
       let post: Post|undefined = posts.find(p=>p.id===sharedPostId);
       if (!post) {
-        const data = await sbFetch(`posts?id=eq.${sharedPostId}&select=*,profile:profiles(id,full_name,username,avatar_url,is_private)`);
+        const data = await sbFetch(`posts?id=eq.${sharedPostId}&select=${POST_SELECT}`);
         if (Array.isArray(data)&&data.length>0) post = { ...data[0], unlocked: unlockedIds.includes(data[0].id) };
       }
       if (post) setChallengePost(post);
@@ -1298,7 +1302,7 @@ export default function App() {
   async function loadPosts() {
     setPostsLoading(true);
     try {
-      const data = await sbFetch("posts?select=*,profile:profiles(id,full_name,username,avatar_url,is_private)&order=created_at.desc");
+      const data = await sbFetch(`posts?select=${POST_SELECT}&order=created_at.desc`);
       if (Array.isArray(data)) setPosts(data);
     } finally { setPostsLoading(false); }
   }
