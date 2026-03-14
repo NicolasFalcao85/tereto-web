@@ -124,7 +124,7 @@ function UnlockedContent({ post }: { post: Post }) {
   );
 }
 
-function FeedCard({ post, onOpenChallenge, likedIds, onLike, index }: { post: Post; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; index: number }) {
+function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap }: { post: Post; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; index: number; onProfileTap?: (userId: string)=>void }) {
   const liked = likedIds.includes(post.id);
   const [copied, setCopied] = useState(false);
   function handleShare() {
@@ -134,10 +134,12 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index }: { post: Po
   return (
     <article style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:20,overflow:"hidden",animation:`fadeUp .4s cubic-bezier(.22,1,.36,1) ${index*55}ms both`}}>
       <div style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:10}}>
-        <Avatar size={36} img={post.profile?.avatar_url}/>
-        <div style={{flex:1}}>
-          <div style={{fontWeight:600,fontSize:14}}>{post.profile?.full_name||post.profile?.username||"Usuario"}</div>
-          <div style={{fontSize:12,color:"var(--muted)"}}>{timeAgo(post.created_at)}</div>
+        <div onClick={()=>onProfileTap&&post.profile&&onProfileTap(post.profile.id)} style={{cursor:onProfileTap?"pointer":"default",display:"flex",alignItems:"center",gap:10,flex:1}}>
+          <Avatar size={36} img={post.profile?.avatar_url}/>
+          <div>
+            <div style={{fontWeight:600,fontSize:14}}>{post.profile?.full_name||post.profile?.username||"Usuario"}</div>
+            <div style={{fontSize:12,color:"var(--muted)"}}>{timeAgo(post.created_at)}</div>
+          </div>
         </div>
       </div>
       <div style={{padding:"0 12px"}}>
@@ -450,7 +452,7 @@ function BottomNav({ active, onChange, pendingCount }: { active: string; onChang
   );
 }
 
-function SocialLists({ userId, followingIds, onFollowChange }: { userId: string; followingIds: string[]; onFollowChange: ()=>void }) {
+function SocialLists({ userId, followingIds, onFollowChange, onProfileTap }: { userId: string; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
   const [tab, setTab] = useState<"following"|"followers">("following");
   const [following, setFollowing] = useState<Profile[]>([]);
   const [followers, setFollowers] = useState<{profile: Profile; status: string}[]>([]);
@@ -498,10 +500,12 @@ function SocialLists({ userId, followingIds, onFollowChange }: { userId: string;
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {list.map(profile=>profile&&(
             <div key={profile.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:"12px",display:"flex",alignItems:"center",gap:10}}>
-              <Avatar size={38} img={profile.avatar_url}/>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:600,fontSize:13}}>{profile.full_name||"Usuario"}</div>
-                <div style={{fontSize:11,color:"var(--muted)"}}>{profile.username?`@${profile.username}`:""} {profile.is_private?"🔒":""}</div>
+              <div onClick={()=>onProfileTap(profile.id)} style={{display:"flex",alignItems:"center",gap:10,flex:1,cursor:"pointer"}}>
+                <Avatar size={38} img={profile.avatar_url}/>
+                <div>
+                  <div style={{fontWeight:600,fontSize:13}}>{profile.full_name||"Usuario"}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>{profile.username?`@${profile.username}`:""} {profile.is_private?"🔒":""}</div>
+                </div>
               </div>
               {tab==="following"&&(
                 <button onClick={()=>handleUnfollow(profile.id)}
@@ -518,7 +522,7 @@ function SocialLists({ userId, followingIds, onFollowChange }: { userId: string;
   );
 }
 
-function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void }) {
+function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange, onProfileTap }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
   const myPosts = posts.filter(p=>p.user_id===user.id);
   const [username, setUsername] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
@@ -667,7 +671,7 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
       </div>
 
       {/* Following / Followers */}
-      <SocialLists userId={user.id} followingIds={followingIds} onFollowChange={onFollowChange}/>
+      <SocialLists userId={user.id} followingIds={followingIds} onFollowChange={onFollowChange} onProfileTap={onProfileTap}/>
 
       {/* My posts */}
       {myPosts.length>0&&(
@@ -700,7 +704,7 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
   );
 }
 
-function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, followingIds, onFollowChange }: { posts: Post[]; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; currentUserId: string; followingIds: string[]; onFollowChange: ()=>void }) {
+function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, followingIds, onFollowChange, onProfileTap }: { posts: Post[]; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; currentUserId: string; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
   const [search, setSearch] = useState("");
   const [pendingFollows, setPendingFollows] = useState<string[]>([]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
@@ -769,7 +773,7 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
               <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>{search?"Sin resultados":"Sin retos públicos aún"}</div>
               <div style={{color:"var(--muted)",fontSize:14}}>Invitá amigos para que publiquen.</div>
             </div>
-          ):filtered.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike}/>)
+          ):filtered.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike} onProfileTap={onProfileTap}/>)
         ):(
           filteredProfiles.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
@@ -778,10 +782,12 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
             </div>
           ):filteredProfiles.map(profile=>(
             <div key={profile.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12}}>
-              <Avatar size={44} img={profile.avatar_url}/>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:700,fontSize:14}}>{profile.full_name||"Usuario"}</div>
-                <div style={{fontSize:12,color:"var(--muted)"}}>{profile.username?`@${profile.username}`:""} {profile.is_private?"🔒 Privado":"🌍 Público"}</div>
+              <div onClick={()=>onProfileTap(profile.id)} style={{display:"flex",alignItems:"center",gap:12,flex:1,cursor:"pointer"}}>
+                <Avatar size={44} img={profile.avatar_url}/>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14}}>{profile.full_name||"Usuario"}</div>
+                  <div style={{fontSize:12,color:"var(--muted)"}}>{profile.username?`@${profile.username}`:""} {profile.is_private?"🔒 Privado":"🌍 Público"}</div>
+                </div>
               </div>
               <button onClick={()=>handleFollow(profile.id)} style={followStyle(profile.id)}>{followLabel(profile.id)}</button>
             </div>
@@ -947,6 +953,110 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
   );
 }
 
+function PublicProfilePage({ profileId, currentUser, followingIds, onFollowChange, onClose, onOpenChallenge, likedIds, onLike, unlockedIds }: { profileId: string; currentUser: User; followingIds: string[]; onFollowChange: ()=>void; onClose: ()=>void; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; unlockedIds: string[] }) {
+  const [profile, setProfile] = useState<Profile|null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [pendingFollow, setPendingFollow] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const isFollowing = followingIds.includes(profileId);
+  const isOwn = profileId === currentUser.id;
+
+  useEffect(()=>{ load(); },[profileId]);
+
+  async function load() {
+    setLoading(true);
+    const [profileData, postsData, followersData, followingCountData] = await Promise.all([
+      sbFetch(`profiles?id=eq.${profileId}&select=*`),
+      sbFetch(`posts?user_id=eq.${profileId}&select=*,profile:profiles(id,full_name,username,avatar_url,is_private)&order=created_at.desc`),
+      sbFetch(`follows?following_id=eq.${profileId}&status=eq.accepted&select=id`),
+      sbFetch(`follows?follower_id=eq.${profileId}&status=eq.accepted&select=id`),
+    ]);
+    if (!isOwn) {
+      const pendingData = await sbFetch(`follows?follower_id=eq.${currentUser.id}&following_id=eq.${profileId}&status=eq.pending&select=id`);
+      if (Array.isArray(pendingData)&&pendingData.length>0) setPendingFollow(true);
+    }
+    if (Array.isArray(profileData)&&profileData.length>0) setProfile(profileData[0]);
+    if (Array.isArray(postsData)) setPosts(postsData);
+    if (Array.isArray(followersData)) setFollowerCount(followersData.length);
+    if (Array.isArray(followingCountData)) setFollowingCount(followingCountData.length);
+    setLoading(false);
+  }
+
+  async function handleFollow() {
+    if (isFollowing) {
+      await sbFetch(`follows?follower_id=eq.${currentUser.id}&following_id=eq.${profileId}`, { method:"DELETE" });
+      onFollowChange();
+    } else if (pendingFollow) {
+      await sbFetch(`follows?follower_id=eq.${currentUser.id}&following_id=eq.${profileId}`, { method:"DELETE" });
+      setPendingFollow(false);
+    } else {
+      await sbFetch("follows", { method:"POST", body:JSON.stringify({ follower_id:currentUser.id, following_id:profileId, status:"pending" }), headers:{ Prefer:"return=minimal" } });
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:profileId, type:"follow_request" }), headers:{ Prefer:"return=minimal" } });
+      setPendingFollow(true);
+      onFollowChange();
+    }
+  }
+
+  const followBtnStyle = { padding:"9px 20px", borderRadius:99, border:`1.5px solid ${isFollowing?"var(--border2)":pendingFollow?"rgba(232,255,71,.3)":"var(--accent)"}`, background:isFollowing?"var(--surface2)":pendingFollow?"rgba(232,255,71,.06)":"rgba(232,255,71,.1)", cursor:"pointer", fontSize:13, fontWeight:700, color:isFollowing?"var(--muted)":pendingFollow?"rgba(232,255,71,.7)":"var(--accent)", fontFamily:"var(--font-b)" } as React.CSSProperties;
+  const followLabel = isFollowing?"✓ Siguiendo":pendingFollow?"⏳ Pendiente":"+ Seguir";
+  const canSeePosts = isOwn||isFollowing||!profile?.is_private;
+  const visiblePosts = canSeePosts ? posts.map(p=>({...p,unlocked:unlockedIds.includes(p.id)})).filter(p=>p.visibility==="public"||isFollowing||isOwn) : [];
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:40,background:"var(--bg)",display:"flex",flexDirection:"column",animation:"fadeIn .15s ease both"}}>
+      <div style={{flex:1,overflowY:"auto",maxWidth:520,margin:"0 auto",width:"100%",padding:"0 0 40px"}}>
+        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(10,10,14,.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid var(--border)",padding:"14px 20px",display:"flex",alignItems:"center",gap:12}}>
+          <button onClick={onClose} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"var(--muted)",fontSize:18,fontFamily:"var(--font-b)",lineHeight:1}}>←</button>
+          <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,flex:1}}>{profile?.username?`@${profile.username}`:(profile?.full_name||"Perfil")}</div>
+        </div>
+        {loading?(
+          <div style={{display:"flex",justifyContent:"center",padding:"80px 0"}}><Spinner/></div>
+        ):!profile?(
+          <div style={{textAlign:"center",padding:"80px 20px",color:"var(--muted)"}}>Perfil no encontrado</div>
+        ):(
+          <>
+            <div style={{padding:"24px 20px 16px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20}}>
+                <Avatar size={76} img={profile.avatar_url}/>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"var(--font-d)",fontSize:20,fontWeight:800}}>{profile.full_name||"Usuario"}</div>
+                  {profile.username&&<div style={{fontSize:13,color:"var(--muted)",marginTop:3}}>@{profile.username}</div>}
+                  {profile.is_private&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>🔒 Cuenta privada</div>}
+                </div>
+                {!isOwn&&<button onClick={handleFollow} style={followBtnStyle}>{followLabel}</button>}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                {([["📸",posts.length,"Retos"],["👥",followerCount,"Seguidores"],["👤",followingCount,"Siguiendo"]] as [string,number,string][]).map(([e,v,l])=>(
+                  <div key={l} style={{padding:"12px 8px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,textAlign:"center"}}>
+                    <div style={{fontSize:18,marginBottom:2}}>{e}</div>
+                    <div style={{fontFamily:"var(--font-d)",fontSize:20,fontWeight:800}}>{v}</div>
+                    <div style={{fontSize:11,color:"var(--muted)"}}>{l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{padding:"0 12px",display:"flex",flexDirection:"column",gap:16}}>
+              {!canSeePosts?(
+                <div style={{textAlign:"center",padding:"40px 20px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,margin:"0 0 16px"}}>
+                  <div style={{fontSize:44,marginBottom:12}}>🔒</div>
+                  <div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,marginBottom:8}}>Cuenta privada</div>
+                  <div style={{color:"var(--muted)",fontSize:14}}>Seguí a {profile.full_name||"este usuario"} para ver sus retos.</div>
+                </div>
+              ):visiblePosts.length===0?(
+                <div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)"}}>No publicó ningún reto todavía.</div>
+              ):(
+                visiblePosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike}/>)
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User|null>(null);
   const [loading, setLoading] = useState(true);
@@ -958,6 +1068,7 @@ export default function App() {
   const [activeNav, setActiveNav] = useState("feed");
   const [challengePost, setChallengePost] = useState<Post|null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [viewingProfileId, setViewingProfileId] = useState<string|null>(null);
   const [sharedPostId, setSharedPostId] = useState<string|null>(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("post");
@@ -1086,18 +1197,19 @@ export default function App() {
               </div>
               {postsLoading?<div style={{display:"flex",justifyContent:"center",padding:"60px 0"}}><Spinner/></div>:(
                 <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:16}}>
-                  {feedPosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike}/>)}
+                  {feedPosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} onProfileTap={setViewingProfileId}/>)}
                   {feedPosts.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>No hay posts todavía. ¡Seguí a alguien o publicá tu primer reto!</div>}
                 </div>
               )}
             </div>
           )}
-          {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing}/>}
+          {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
           {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }}/>}
-          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing}/>}
-          <BottomNav active={activeNav} onChange={setActiveNav} pendingCount={pendingCount}/>
+          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
+          <BottomNav active={activeNav} onChange={id=>{ setViewingProfileId(null); setActiveNav(id); }} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
+          {viewingProfileId&&<PublicProfilePage profileId={viewingProfileId} currentUser={user} followingIds={followingIds} onFollowChange={loadFollowing} onClose={()=>setViewingProfileId(null)} onOpenChallenge={p=>{ setChallengePost(p); }} likedIds={likedIds} onLike={handleLike} unlockedIds={unlockedIds}/>}
         </>
       )}
     </div></>
