@@ -126,6 +126,11 @@ function UnlockedContent({ post }: { post: Post }) {
 
 function FeedCard({ post, onOpenChallenge, likedIds, onLike, index }: { post: Post; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; index: number }) {
   const liked = likedIds.includes(post.id);
+  const [copied, setCopied] = useState(false);
+  function handleShare() {
+    const url = `${window.location.origin}?post=${post.id}`;
+    navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+  }
   return (
     <article style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:20,overflow:"hidden",animation:`fadeUp .4s cubic-bezier(.22,1,.36,1) ${index*55}ms both`}}>
       <div style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:10}}>
@@ -144,7 +149,7 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index }: { post: Po
           <span style={{fontSize:18}}>{liked?"❤️":"🤍"}</span>
           <span style={{fontSize:13,fontWeight:600,color:liked?"#FF6B6B":"var(--muted)"}}>{fmt((post.likes_count||0)+(liked?1:0))}</span>
         </button>
-        <button style={{background:"none",border:"none",cursor:"pointer",marginLeft:"auto",color:"var(--muted)",fontSize:18,padding:0}}>↗</button>
+        <button onClick={handleShare} style={{background:"none",border:"none",cursor:"pointer",marginLeft:"auto",color:copied?"var(--accent)":"var(--muted)",fontSize:copied?13:18,fontWeight:copied?700:400,fontFamily:"var(--font-b)",padding:0,transition:"all .2s"}}>{copied?"✅ Copiado":"↗"}</button>
       </div>
       {!post.unlocked&&(
         <div onClick={()=>onOpenChallenge(post)} style={{margin:"0 12px 14px",padding:"10px 14px",background:"rgba(232,255,71,.06)",border:"1px solid rgba(232,255,71,.2)",borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
@@ -953,9 +958,29 @@ export default function App() {
   const [activeNav, setActiveNav] = useState("feed");
   const [challengePost, setChallengePost] = useState<Post|null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [sharedPostId, setSharedPostId] = useState<string|null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("post");
+    if (id) { localStorage.setItem("pending_post_id", id); window.history.replaceState({}, "", window.location.pathname); return id; }
+    return localStorage.getItem("pending_post_id");
+  });
 
   useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user) setUser(s.user); setLoading(false); }); },[]);
   useEffect(()=>{ if(user){ loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); loadFollowing(); } },[user]);
+  useEffect(()=>{
+    if (!user || !sharedPostId || postsLoading || posts.length===0) return;
+    async function openShared() {
+      let post: Post|undefined = posts.find(p=>p.id===sharedPostId);
+      if (!post) {
+        const data = await sbFetch(`posts?id=eq.${sharedPostId}&select=*,profile:profiles(id,full_name,username,avatar_url,is_private)`);
+        if (Array.isArray(data)&&data.length>0) post = { ...data[0], unlocked: unlockedIds.includes(data[0].id) };
+      }
+      if (post) setChallengePost(post);
+      localStorage.removeItem("pending_post_id");
+      setSharedPostId(null);
+    }
+    openShared();
+  },[user, sharedPostId, posts, postsLoading]);
 
   async function loadPosts() {
     setPostsLoading(true);
