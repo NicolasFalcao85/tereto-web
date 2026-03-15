@@ -478,7 +478,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
 
 interface PendingUnlock { id: string; photo_url: string; created_at: string; post: Post; challenger: Profile; }
 
-function NotificationsPage({ user, posts, onReviewed }: { user: User; posts: Post[]; onReviewed: ()=>void }) {
+function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>void }) {
   const [pending, setPending] = useState<PendingUnlock[]>([]);
   const [myNotifs, setMyNotifs] = useState<{id:string;type:string;post:Post;created_at:string;read:boolean}[]>([]);
   const [loading, setLoading] = useState(true);
@@ -494,7 +494,8 @@ function NotificationsPage({ user, posts, onReviewed }: { user: User; posts: Pos
     // Mark as read
     await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false`, { method:"PATCH", body:JSON.stringify({read:true}), headers:{Prefer:"return=minimal"} });
     // Pending reviews of my posts
-    const myPostIds = posts.filter(p=>p.user_id===user.id).map(p=>p.id);
+    const myPostsData = await sbFetch(`posts?user_id=eq.${user.id}&select=id`);
+    const myPostIds = Array.isArray(myPostsData) ? myPostsData.map((p:{id:string})=>p.id) : [];
     if (myPostIds.length>0) {
       const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${myPostIds.join(",")})&select=*,post:posts(${POST_COLS}),challenger:profiles!unlocks_user_id_fkey(*)`);
       if (Array.isArray(data)) { setPending(data); if(data.length>0) setTab("review"); }
@@ -1525,7 +1526,7 @@ export default function App() {
           )}
           {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} currentUser={user}/>}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
-          {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }}/>}
+          {activeNav==="notifs"&&<NotificationsPage user={user} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }}/>}
           {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
           <BottomNav active={activeNav} onChange={id=>{ setViewingProfileId(null); setActiveNav(id); }} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
