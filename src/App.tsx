@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
+interface BeforeInstallPromptEvent extends Event { prompt(): Promise<void>; userChoice: Promise<{outcome:"accepted"|"dismissed"}> }
+
 const SUPABASE_URL = "https://aedbqwnsskuznmbywyav.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_XP97uQLTvyBvGvhVTApwDA_V0g1hAmq";
 
@@ -2025,8 +2027,16 @@ export default function App() {
     return localStorage.getItem("pending_post_id");
   });
   const [duelContext, setDuelContext] = useState<{profile: Profile; postId: string}|null>(null);
+  const [installPrompt, setInstallPrompt] = useState<Event|null>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
   const prevPendingCount = useRef(-1);
   const refCode = useRef<string|null>(new URLSearchParams(window.location.search).get("ref"));
+
+  useEffect(()=>{
+    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); if(!localStorage.getItem("tereto_install_dismissed")) setShowInstallBanner(true); };
+    window.addEventListener("beforeinstallprompt", handler);
+    return ()=>window.removeEventListener("beforeinstallprompt", handler);
+  },[]);
 
   useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user){ setUser(s.user); if(!localStorage.getItem("tereto_terms_accepted")) setShowTerms(true); else if(!localStorage.getItem("tereto_onboarded")) setShowOnboarding(true); } setLoading(false); }); },[]);
   useEffect(()=>{
@@ -2151,6 +2161,18 @@ export default function App() {
     }
   }
 
+  async function handleInstall() {
+    if (!installPrompt) return;
+    (installPrompt as BeforeInstallPromptEvent).prompt();
+    const { outcome } = await (installPrompt as BeforeInstallPromptEvent).userChoice;
+    if (outcome === "accepted") { setShowInstallBanner(false); setInstallPrompt(null); }
+  }
+
+  function dismissInstall() {
+    localStorage.setItem("tereto_install_dismissed","1");
+    setShowInstallBanner(false);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     setUser(null); setPosts([]); setUnlockedIds([]); setLikedIds([]); setFollowingIds([]); setActiveNav("feed");
@@ -2209,6 +2231,17 @@ export default function App() {
           {activeNav==="create"&&<CreatePage user={user} duelTarget={duelContext?.profile??null} onClearDuel={()=>setDuelContext(null)} onPublished={()=>{ loadPosts(); setActiveNav("feed"); setDuelContext(null); }}/>}
           {activeNav==="notifs"&&<NotificationsPage user={user} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }} onOpenChallenge={p=>{ setChallengePost(p); setActiveNav("feed"); }}/>}
           {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
+          {showInstallBanner&&(
+            <div style={{position:"fixed",bottom:74,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:480,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,zIndex:19,boxShadow:"0 4px 24px rgba(0,0,0,.4)",animation:"fadeUp .3s ease both"}}>
+              <div style={{fontSize:28,flexShrink:0}}>⚡</div>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800}}>Instalá TeReto</div>
+                <div style={{fontSize:12,color:"var(--muted)",marginTop:1}}>Accedé más rápido desde tu pantalla de inicio</div>
+              </div>
+              <button onClick={handleInstall} style={{padding:"7px 14px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#0A0A0E",flexShrink:0}}>Instalar</button>
+              <button onClick={dismissInstall} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"var(--muted)",padding:4,flexShrink:0}}>✕</button>
+            </div>
+          )}
           <BottomNav active={activeNav} onChange={id=>{ setViewingProfileId(null); setDuelContext(null); setActiveNav(id); }} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
           {viewingProfileId&&<PublicProfilePage profileId={viewingProfileId} currentUser={user} followingIds={followingIds} onFollowChange={loadFollowing} onClose={()=>setViewingProfileId(null)} onOpenChallenge={p=>{ setChallengePost(p); }} likedIds={likedIds} onLike={handleLike} unlockedIds={unlockedIds}/>}
