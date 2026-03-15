@@ -1451,13 +1451,18 @@ export default function App() {
       const photo_url = await uploadImage(user.id, photoFile);
       if (!photo_url) throw new Error("No se pudo subir la foto. Verificá tu conexión.");
       const existing = await sbFetch(`unlocks?user_id=eq.${user.id}&post_id=eq.${postId}&select=id`);
-      let result;
+      let unlockId: string|null = null;
       if (Array.isArray(existing) && existing.length > 0) {
-        result = await sbFetch(`unlocks?id=eq.${existing[0].id}`, { method:"PATCH", body:JSON.stringify({ status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
+        unlockId = existing[0].id;
+        const result = await sbFetch(`unlocks?id=eq.${unlockId}`, { method:"PATCH", body:JSON.stringify({ status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
+        if (result && result.message) throw new Error(result.message);
       } else {
-        result = await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
+        const result = await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"return=representation" } });
+        if (result && result.message) throw new Error(result.message);
+        if (Array.isArray(result) && result.length > 0) unlockId = result[0].id;
       }
-      if (result && result.message) throw new Error(result.message);
+      // Notificar al creador del post
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:post.user_id, type:"new_attempt", post_id:postId, unlock_id:unlockId }), headers:{ Prefer:"return=minimal" } });
       return;
     } else {
       await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"approved" }), headers:{ Prefer:"return=minimal" } });
