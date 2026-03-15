@@ -370,8 +370,13 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
     } else {
       if (!photoFile) return;
       setStatus("uploading");
-      await onUnlock(post.id, photoFile);
-      setStatus("pending");
+      try {
+        await onUnlock(post.id, photoFile);
+        setStatus("pending");
+      } catch {
+        setStatus("idle");
+        alert("Error al subir la foto. Verificá tu conexión e intentá de nuevo.");
+      }
     }
   }
 
@@ -1433,7 +1438,7 @@ export default function App() {
     if (!post) return;
     if (post.challenge_type==="photo" && photoFile) {
       const photo_url = await uploadImage(user.id, photoFile);
-      if (!photo_url) return;
+      if (!photo_url) throw new Error("Upload failed");
       await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
       return; // modal se cierra desde el propio ChallengeModal al setStatus("pending")
     } else {
