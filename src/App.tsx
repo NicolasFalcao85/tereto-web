@@ -1699,6 +1699,93 @@ function CreatePage({ user, onPublished, duelTarget, onClearDuel }: { user: User
   );
 }
 
+function TermsModal({ onAccept, onReject }: { onAccept: ()=>void; onReject: ()=>void }) {
+  const [scrolledToBottom, setScrolledToBottom] = useState(false);
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) setScrolledToBottom(true);
+  }
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(10,10,14,.97)",backdropFilter:"blur(8px)",zIndex:70,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",animation:"fadeIn .2s ease both"}}>
+      <div style={{width:"100%",maxWidth:480,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:24,display:"flex",flexDirection:"column",maxHeight:"90vh",animation:"fadeUp .4s cubic-bezier(.22,1,.36,1) both"}}>
+        {/* Header fijo */}
+        <div style={{padding:"24px 24px 16px",borderBottom:"1px solid var(--border)",flexShrink:0}}>
+          <div style={{fontSize:36,marginBottom:8}}>📋</div>
+          <div style={{fontFamily:"var(--font-d)",fontSize:20,fontWeight:800}}>Términos y Condiciones</div>
+          <div style={{fontSize:13,color:"var(--muted)",marginTop:4}}>Leé y aceptá para continuar</div>
+        </div>
+        {/* Contenido scrolleable */}
+        <div onScroll={handleScroll} style={{overflowY:"auto",padding:"20px 24px",flex:1,fontSize:13,lineHeight:1.75,color:"rgba(242,242,248,.8)"}}>
+
+          <Section title="1. Edad mínima"/>
+          <p>Para usar TeReto debés tener al menos <strong>13 años</strong>. Si tenés entre 13 y 17 años, necesitás el consentimiento de un adulto responsable. Al aceptar estos términos declarás tener la edad requerida o contar con dicha autorización.</p>
+
+          <Section title="2. Contenido para adultos (+18)"/>
+          <p>TeReto permite publicar contenido de carácter adulto (<strong>+18</strong>) siempre que sea etiquetado correctamente como tal y que todos los participantes sean mayores de edad. Al publicar o interactuar con contenido +18 declarás tener 18 años o más.</p>
+          <p>Queda <strong>estrictamente prohibido</strong> publicar material sexual que involucre a menores de edad (CSAM). Este tipo de contenido será eliminado de inmediato, se reportará a las autoridades competentes y resultará en la suspensión permanente de la cuenta.</p>
+
+          <Section title="3. Contenido prohibido"/>
+          <p>No está permitido publicar, compartir ni utilizar TeReto para difundir:</p>
+          <ul style={{margin:"8px 0 8px 16px",display:"flex",flexDirection:"column",gap:4}}>
+            <li>Imágenes o videos de violencia real, mutilación, torturas o muerte.</li>
+            <li>Contenido que promueva, glorifique o incite al suicidio o autolesiones.</li>
+            <li>Acoso, hostigamiento, intimidación o bullying hacia cualquier persona.</li>
+            <li>Discurso de odio por motivos de raza, etnia, género, orientación sexual, religión, nacionalidad o discapacidad.</li>
+            <li>Contenido que identifique o exponga información privada de terceros sin su consentimiento (doxing).</li>
+            <li>Material que infrinja derechos de autor, marcas registradas u otros derechos de propiedad intelectual.</li>
+            <li>Spam, phishing, malware o cualquier actividad fraudulenta.</li>
+            <li>Contenido que promueva actividades ilegales.</li>
+          </ul>
+
+          <Section title="4. Retos y desafíos"/>
+          <p>Los retos deben ser respetuosos y no pueden exigir a otros usuarios realizar actos degradantes, ilegales, peligrosos o que atenten contra su dignidad. No se permite usar la plataforma para humillar, extorsionar o coaccionar a otras personas bajo la forma de un reto.</p>
+
+          <Section title="5. Responsabilidad del usuario"/>
+          <p>Sos el único responsable del contenido que publicás. Al subir material a TeReto otorgás a la plataforma una licencia no exclusiva para mostrarlo a otros usuarios según la configuración de privacidad que elegiste. Esta licencia no implica que cedés la propiedad de tu contenido.</p>
+
+          <Section title="6. Moderación y suspensión de cuentas"/>
+          <p>TeReto se reserva el derecho de eliminar cualquier contenido que viole estos términos, así como de suspender o dar de baja cuentas de forma temporal o permanente, sin previo aviso, ante infracciones graves o reiteradas. No hay obligación de reembolso ni compensación en caso de suspensión por violaciones a estos términos.</p>
+
+          <Section title="7. Privacidad y datos"/>
+          <p>TeReto recopila únicamente los datos necesarios para el funcionamiento de la plataforma (nombre, email, foto de perfil vía Google, y el contenido que el usuario decide publicar). No vendemos datos personales a terceros. Para más información consultá nuestra Política de Privacidad.</p>
+
+          <Section title="8. Exención de responsabilidad"/>
+          <p>TeReto no se hace responsable por el contenido generado por sus usuarios. La plataforma es un espacio intermediario y no tiene control previo sobre lo que los usuarios publican. Sin embargo, actuamos con diligencia ante denuncias de contenido indebido.</p>
+
+          <Section title="9. Denuncias"/>
+          <p>Si encontrás contenido que viola estos términos, podés reportarlo directamente desde la publicación. Tomaremos las medidas necesarias en el menor tiempo posible.</p>
+
+          <Section title="10. Modificaciones"/>
+          <p>Podemos actualizar estos Términos y Condiciones en cualquier momento. Te notificaremos sobre cambios significativos. El uso continuado de la plataforma tras una actualización implica la aceptación de los nuevos términos.</p>
+
+          <Section title="11. Legislación aplicable"/>
+          <p>Estos términos se rigen por las leyes de la República Argentina. Cualquier disputa será sometida a la jurisdicción de los tribunales ordinarios de la Ciudad Autónoma de Buenos Aires.</p>
+
+          <div style={{marginTop:16,padding:"12px 14px",background:"rgba(232,255,71,.04)",border:"1px solid rgba(232,255,71,.15)",borderRadius:12,fontSize:12,color:"var(--muted)"}}>
+            Al tocar <strong style={{color:"var(--accent)"}}>Acepto</strong>, confirmás que leíste, entendiste y aceptás la totalidad de estos Términos y Condiciones, incluyendo las restricciones de edad y de contenido.
+          </div>
+        </div>
+        {/* Footer fijo */}
+        <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:10,flexShrink:0}}>
+          {!scrolledToBottom&&<div style={{textAlign:"center",fontSize:12,color:"var(--muted)"}}>↓ Scrolleá para leer todo</div>}
+          <button onClick={onAccept} disabled={!scrolledToBottom}
+            style={{width:"100%",padding:"14px",background:scrolledToBottom?"var(--accent)":"var(--surface2)",border:"none",borderRadius:14,cursor:scrolledToBottom?"pointer":"default",fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:scrolledToBottom?"#0A0A0E":"var(--muted)",transition:"all .2s"}}>
+            Acepto los Términos y Condiciones
+          </button>
+          <button onClick={onReject}
+            style={{width:"100%",padding:"12px",background:"none",border:"1px solid var(--border)",borderRadius:14,cursor:"pointer",fontFamily:"var(--font-b)",fontSize:14,color:"var(--muted)"}}>
+            No acepto — salir
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title }: { title: string }) {
+  return <div style={{fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"var(--text)",marginTop:18,marginBottom:4}}>{title}</div>;
+}
+
 function OnboardingModal({ onDone }: { onDone: ()=>void }) {
   const [step, setStep] = useState(0);
   const steps = [
@@ -1874,6 +1961,7 @@ export default function App() {
   const [challengePost, setChallengePost] = useState<Post|null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
   const [viewingProfileId, setViewingProfileId] = useState<string|null>(null);
+  const [showTerms, setShowTerms] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [sharedPostId, setSharedPostId] = useState<string|null>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1885,7 +1973,7 @@ export default function App() {
   const prevPendingCount = useRef(-1);
   const refCode = useRef<string|null>(new URLSearchParams(window.location.search).get("ref"));
 
-  useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user){ setUser(s.user); if(!localStorage.getItem("tereto_onboarded")) setShowOnboarding(true); } setLoading(false); }); },[]);
+  useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user){ setUser(s.user); if(!localStorage.getItem("tereto_terms_accepted")) setShowTerms(true); else if(!localStorage.getItem("tereto_onboarded")) setShowOnboarding(true); } setLoading(false); }); },[]);
   useEffect(()=>{
     if(user){
       loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); loadFollowing();
@@ -2069,7 +2157,8 @@ export default function App() {
           <BottomNav active={activeNav} onChange={id=>{ setViewingProfileId(null); setDuelContext(null); setActiveNav(id); }} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
           {viewingProfileId&&<PublicProfilePage profileId={viewingProfileId} currentUser={user} followingIds={followingIds} onFollowChange={loadFollowing} onClose={()=>setViewingProfileId(null)} onOpenChallenge={p=>{ setChallengePost(p); }} likedIds={likedIds} onLike={handleLike} unlockedIds={unlockedIds}/>}
-          {showOnboarding&&<OnboardingModal onDone={()=>setShowOnboarding(false)}/>}
+          {showTerms&&<TermsModal onAccept={()=>{ localStorage.setItem("tereto_terms_accepted","1"); setShowTerms(false); if(!localStorage.getItem("tereto_onboarded")) setShowOnboarding(true); }} onReject={()=>{ setShowTerms(false); handleLogout(); }}/>}
+          {!showTerms&&showOnboarding&&<OnboardingModal onDone={()=>setShowOnboarding(false)}/>}
         </>
       )}
     </div></>
