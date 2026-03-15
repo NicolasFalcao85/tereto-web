@@ -1093,10 +1093,10 @@ function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; 
   function close() { stream?.getTracks().forEach(t => t.stop()); onClose(); }
 
   return (
-    <div style={{position:"fixed",inset:0,background:"#000",zIndex:80,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <video ref={videoRef} playsInline muted style={{flex:1,width:"100%",objectFit:"cover",minHeight:0}}/>
-      {!ready && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}><Spinner size={40}/></div>}
-      <div style={{height:120,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",background:"rgba(0,0,0,.85)"}}>
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#000",zIndex:80}}>
+      <video ref={videoRef} playsInline muted style={{position:"absolute",top:0,left:0,right:0,bottom:110,width:"100%",height:"calc(100% - 110px)",objectFit:"cover"}}/>
+      {!ready && <div style={{position:"absolute",top:0,left:0,right:0,bottom:110,display:"flex",alignItems:"center",justifyContent:"center"}}><Spinner size={40}/></div>}
+      <div style={{position:"absolute",bottom:0,left:0,right:0,height:110,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",background:"rgba(0,0,0,.85)"}}>
         <button onClick={close} style={{background:"none",border:"1.5px solid rgba(255,255,255,.3)",borderRadius:99,padding:"10px 20px",color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
         <button onClick={capture} disabled={!ready} style={{width:64,height:64,borderRadius:"50%",background:"#fff",border:"4px solid rgba(255,255,255,.4)",cursor:ready?"pointer":"default",fontSize:26,display:"flex",alignItems:"center",justifyContent:"center"}}>📸</button>
         <div style={{width:80}}/>
