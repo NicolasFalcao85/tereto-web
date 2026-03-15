@@ -2235,8 +2235,8 @@ export default function App() {
           {activeNav==="notifs"&&<NotificationsPage user={user} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }} onOpenChallenge={p=>{ setChallengePost(p); setActiveNav("feed"); }}/>}
           {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
           {showInstallBanner&&(
-            <div onClick={dismissInstall} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.7)",backdropFilter:"blur(4px)",zIndex:55,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-              <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:360,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:24,padding:"32px 24px",textAlign:"center",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both"}}>
+            <div onClick={dismissInstall} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.7)",backdropFilter:"blur(4px)",zIndex:55}}>
+              <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"50%",left:12,right:12,transform:"translateY(-50%)",background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:24,padding:"32px 20px",textAlign:"center",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both"}}>
                 <div style={{fontSize:52,marginBottom:12}}>⚡</div>
                 <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:8}}>Instalá TeReto</div>
                 <div style={{fontSize:14,color:"var(--muted)",marginBottom:24,lineHeight:1.5}}>Accedé más rápido desde tu pantalla de inicio, sin abrir el browser.</div>
