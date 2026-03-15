@@ -377,30 +377,38 @@ function ReactionsBar({ postId, currentUserId }: { postId: string; currentUserId
 }
 
 function DuelModal({ post, currentUser, onClose }: { post: Post; currentUser: User; onClose: ()=>void }) {
-  const [following, setFollowing] = useState<Profile[]>([]);
-  const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string|null>(null);
+  const challenged = post.profile;
+  const [challengeType, setChallengeType] = useState<"trivia"|"photo">("trivia");
+  const [prompt, setPrompt] = useState("");
+  const [options, setOptions] = useState(["","","",""]);
+  const [correctIndex, setCorrectIndex] = useState(0);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
-  useEffect(()=>{
-    sbFetch(`follows?follower_id=eq.${currentUser.id}&status=eq.accepted&select=profile:profiles!follows_following_id_fkey(id,full_name,username,avatar_url)`)
-      .then(data=>{ if(Array.isArray(data)) setFollowing(data.map((f:{profile:Profile})=>f.profile).filter(Boolean)); });
-  },[currentUser.id]);
+  const canSend = prompt.trim() && (challengeType==="photo" || options.every(o=>o.trim()));
 
   async function handleSend() {
-    if (!selectedId||sending) return;
+    if (!canSend||sending) return;
     setSending(true);
     try {
+      const triviaOptions = challengeType==="trivia" ? options.map(o=>o.trim()) : null;
+      const correctAnswer = challengeType==="trivia" ? options[correctIndex].trim() : null;
+      const postData = await sbFetch("posts", {
+        method:"POST",
+        body:JSON.stringify({ user_id:currentUser.id, emoji:"⚔️", caption:`Reto personal para ${challenged?.full_name||"vos"}`, gradient:"linear-gradient(135deg,#f093fb,#f5576c)", challenge_type:challengeType, prompt, correct_answer:correctAnswer, options:triviaOptions, max_attempts:3, visibility:"friends" }),
+        headers:{ Prefer:"return=representation" }
+      });
+      const newPostId = Array.isArray(postData)&&postData.length>0 ? postData[0].id : null;
+      if (!newPostId) throw new Error("sin ID");
       const duelData = await sbFetch("duels", {
         method:"POST",
-        body:JSON.stringify({ challenger_id:currentUser.id, challenged_id:selectedId, challenger_post_id:post.id, challenged_post_id:post.id, status:"pending" }),
+        body:JSON.stringify({ challenger_id:currentUser.id, challenged_id:post.user_id, challenger_post_id:newPostId, challenged_post_id:post.id, status:"pending" }),
         headers:{ Prefer:"return=representation" }
       });
       const duelId = Array.isArray(duelData)&&duelData.length>0 ? duelData[0].id : null;
       await sbFetch("notifications", {
         method:"POST",
-        body:JSON.stringify({ user_id:selectedId, type:"duel_request", post_id:post.id, duel_id:duelId }),
+        body:JSON.stringify({ user_id:post.user_id, type:"duel_request", post_id:newPostId, duel_id:duelId }),
         headers:{ Prefer:"return=minimal" }
       });
       setSent(true);
@@ -410,13 +418,12 @@ function DuelModal({ post, currentUser, onClose }: { post: Post; currentUser: Us
     setSending(false);
   }
 
-  const filtered = search ? following.filter(u=>(u.full_name||"").toLowerCase().includes(search.toLowerCase())||(u.username||"").toLowerCase().includes(search.toLowerCase())) : following;
-
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
-        {/* Header fijo */}
-        <div style={{padding:"20px 20px 0",flexShrink:0}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"88vh",display:"flex",flexDirection:"column"}}>
+
+        {/* Header — siempre visible */}
+        <div style={{padding:"18px 20px 0",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",marginBottom:14}}>
             <div style={{flex:1}}/>
             <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)"}}/>
@@ -424,40 +431,56 @@ function DuelModal({ post, currentUser, onClose }: { post: Post; currentUser: Us
               <button onClick={onClose} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,width:28,height:28,cursor:"pointer",color:"var(--muted)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
             </div>
           </div>
-          <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:4}}>⚔️ Duelo 1v1</div>
-          <div style={{fontSize:13,color:"var(--muted)",marginBottom:10,lineHeight:1.5}}>Los dos intentan el mismo reto. Gana quien lo supera primero.</div>
-          <div style={{padding:"9px 12px",background:"rgba(232,255,71,.05)",border:"1px solid rgba(232,255,71,.15)",borderRadius:10,marginBottom:12,fontSize:12,color:"var(--muted)"}}>
-            <span style={{color:"var(--text)",fontWeight:600}}>Reto: </span>{post.prompt.slice(0,70)}{post.prompt.length>70?"…":""}
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+            <Avatar size={36} img={challenged?.avatar_url}/>
+            <div>
+              <div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800}}>⚔️ Retar a {challenged?.full_name||challenged?.username||"este usuario"}</div>
+              <div style={{fontSize:12,color:"var(--muted)"}}>Creá un reto nuevo solo para esta persona</div>
+            </div>
           </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..."
-            style={{width:"100%",padding:"9px 12px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:10,color:"var(--text)",fontSize:13,fontFamily:"var(--font-b)",outline:"none",marginBottom:10}}/>
+          {/* Tipo */}
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            {(["trivia","photo"] as const).map(t=>(
+              <button key={t} onClick={()=>setChallengeType(t)}
+                style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${challengeType===t?"var(--accent)":"var(--border2)"}`,background:challengeType===t?"rgba(232,255,71,.08)":"var(--surface2)",cursor:"pointer",fontFamily:"var(--font-b)",fontSize:13,fontWeight:600,color:challengeType===t?"var(--accent)":"var(--muted)"}}>
+                {t==="trivia"?"🧠 Trivia":"📸 Foto"}
+              </button>
+            ))}
+          </div>
         </div>
-        {/* Lista scrollable */}
-        <div style={{overflowY:"auto",flex:1,padding:"0 20px"}}>
-          {sent?(
-            <div style={{textAlign:"center",padding:"24px 0",fontSize:32}}>⚔️<div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,marginTop:8,color:"var(--accent)"}}>¡Duelo enviado!</div></div>
-          ):following.length===0?(
-            <div style={{textAlign:"center",padding:"24px",color:"var(--muted)",fontSize:13}}>Seguí a alguien para poder retarlo.</div>
-          ):filtered.map(u=>{
-            const sel = selectedId===u.id;
-            return (
-              <div key={u.id} onClick={()=>setSelectedId(sel?null:u.id)}
-                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:sel?"rgba(232,255,71,.08)":"var(--surface2)",border:`1.5px solid ${sel?"var(--accent)":"var(--border2)"}`,borderRadius:12,cursor:"pointer",marginBottom:8,transition:"all .15s"}}>
-                <Avatar size={38} img={u.avatar_url}/>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:600,fontSize:13,color:sel?"var(--accent)":"var(--text)"}}>{u.full_name||"Usuario"}</div>
-                  {u.username&&<div style={{fontSize:11,color:"var(--muted)"}}>@{u.username}</div>}
-                </div>
-                {sel&&<span style={{color:"var(--accent)",fontSize:16}}>✓</span>}
-              </div>
-            );
-          })}
+
+        {/* Contenido scrollable */}
+        <div style={{overflowY:"auto",flex:1,padding:"0 20px",display:"flex",flexDirection:"column",gap:10}}>
+          <textarea value={prompt} onChange={e=>setPrompt(e.target.value)}
+            placeholder={challengeType==="trivia"?"Escribí la pregunta...":"Describí qué foto tiene que subir..."} rows={3}
+            style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
+          {challengeType==="trivia"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{fontSize:11,color:"var(--muted)"}}>Tocá la letra para marcar la correcta</div>
+              {options.map((opt,i)=>{
+                const letters=["A","B","C","D"]; const isC=correctIndex===i;
+                return (
+                  <div key={i} style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <button type="button" onClick={()=>setCorrectIndex(i)}
+                      style={{width:30,height:30,borderRadius:8,background:isC?"var(--accent)":"var(--surface2)",border:`1.5px solid ${isC?"var(--accent)":"var(--border2)"}`,cursor:"pointer",fontSize:11,fontWeight:800,color:isC?"#0A0A0E":"var(--muted)",flexShrink:0}}>
+                      {letters[i]}
+                    </button>
+                    <input value={opt} onChange={e=>setOptions(prev=>{const n=[...prev];n[i]=e.target.value;return n;})}
+                      placeholder={`Opción ${letters[i]}`}
+                      style={{flex:1,background:isC?"rgba(232,255,71,.05)":"var(--surface2)",border:`1.5px solid ${isC?"rgba(232,255,71,.4)":"var(--border2)"}`,borderRadius:10,padding:"9px 12px",color:"var(--text)",fontSize:13,fontFamily:"var(--font-b)",outline:"none"}}/>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {sent&&<div style={{textAlign:"center",padding:"16px 0",fontSize:32}}>⚔️<div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,marginTop:6,color:"var(--accent)"}}>¡Duelo enviado!</div></div>}
         </div>
-        {/* Botón fijo abajo */}
+
+        {/* Footer — siempre visible */}
         <div style={{padding:"12px 20px 36px",flexShrink:0}}>
-          <button onClick={handleSend} disabled={!selectedId||sending||sent}
-            style={{width:"100%",padding:"14px",background:selectedId&&!sending&&!sent?"var(--accent)":"var(--surface2)",border:"none",borderRadius:14,cursor:selectedId&&!sending&&!sent?"pointer":"default",fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:selectedId&&!sending&&!sent?"#0A0A0E":"var(--muted)"}}>
-            {sending?"Enviando…":"⚔️ Enviar duelo"}
+          <button onClick={handleSend} disabled={!canSend||sending||sent}
+            style={{width:"100%",padding:"14px",background:canSend&&!sending&&!sent?"var(--accent)":"var(--surface2)",border:"none",borderRadius:14,cursor:canSend&&!sending&&!sent?"pointer":"default",fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:canSend&&!sending&&!sent?"#0A0A0E":"var(--muted)"}}>
+            {sending?"Enviando…":"⚔️ Enviar reto"}
           </button>
         </div>
       </div>
