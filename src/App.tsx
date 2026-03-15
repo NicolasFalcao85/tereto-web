@@ -81,7 +81,25 @@ const GlobalStyles = () => (<style>{`
   @keyframes blurIn{from{filter:blur(20px);opacity:.4}to{filter:blur(0);opacity:1}}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  @keyframes slideDown{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:translateY(0)}}
 `}</style>);
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+let _toastSetter: ((msg: string) => void) | null = null;
+export function showToast(msg: string) { _toastSetter?.(msg); }
+
+function ToastProvider() {
+  const [msg, setMsg] = useState("");
+  _toastSetter = setMsg;
+  useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(""), 2800); return () => clearTimeout(t); }, [msg]);
+  if (!msg) return null;
+  return (
+    <div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",zIndex:9999,background:"#1e1e28",border:"1.5px solid var(--accent)",borderRadius:14,padding:"10px 20px",fontSize:14,fontWeight:600,color:"var(--accent)",boxShadow:"0 4px 24px rgba(0,0,0,.5)",animation:"slideDown .25s cubic-bezier(.22,1,.36,1) both",whiteSpace:"nowrap"}}>
+      {msg}
+    </div>
+  );
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 function fmt(n: number) { return n>=1000?(n/1000).toFixed(1)+"k":String(n); }
 function timeAgo(d: string) { const m=Math.floor((Date.now()-new Date(d).getTime())/60000); if(m<60) return `hace ${m}m`; const h=Math.floor(m/60); if(h<24) return `hace ${h}h`; return `hace ${Math.floor(h/24)}d`; }
@@ -728,6 +746,9 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
     if (accept) {
       await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:followerId, type:"follow_accepted" }), headers:{Prefer:"return=minimal"} });
       onFollowChange();
+      showToast("✅ Solicitud aceptada");
+    } else {
+      showToast("Solicitud rechazada");
     }
     setFollowRequests(prev=>prev.filter(f=>f.id!==followId));
   }
@@ -900,16 +921,16 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
   async function handleFollow(profileId: string) {
     if (followingIds.includes(profileId)) {
       await sbFetch(`follows?follower_id=eq.${currentUserId}&following_id=eq.${profileId}`, { method:"DELETE" });
-      onFollowChange();
+      onFollowChange(); showToast("Dejaste de seguir");
     } else if (pendingFollows.includes(profileId)) {
       await sbFetch(`follows?follower_id=eq.${currentUserId}&following_id=eq.${profileId}`, { method:"DELETE" });
       setPendingFollows(prev=>prev.filter(id=>id!==profileId));
+      showToast("Solicitud cancelada");
     } else {
       await sbFetch("follows", { method:"POST", body:JSON.stringify({ follower_id:currentUserId, following_id:profileId, status:"pending" }), headers:{ Prefer:"return=minimal" } });
-      // notify
       await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:profileId, type:"follow_request" }), headers:{ Prefer:"return=minimal" } });
       setPendingFollows(prev=>[...prev,profileId]);
-      onFollowChange();
+      onFollowChange(); showToast("✅ Solicitud enviada");
     }
   }
 
@@ -1047,7 +1068,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
         body: JSON.stringify({ user_id:user.id, emoji:"🖼️", caption, gradient, image_url, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3, visibility }),
         headers: { Prefer:"return=representation" }
       });
-      if (data && !data.error && !data.message) onPublished();
+      if (data && !data.error && !data.message) { showToast("✅ ¡Reto publicado!"); onPublished(); }
       else setError("Error al publicar. Intentá de nuevo.");
     } catch { setError("Error al publicar. Intentá de nuevo."); }
     finally { setPublishing(false); }
@@ -1095,7 +1116,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
 
         {/* Caption */}
         <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
-          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>DESCRIPCIÓN</div>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>DESCRIPCIÓN <span style={{color:"#FF6B6B",fontWeight:400}}>(obligatorio)</span></div>
           <textarea value={caption} onChange={e=>setCaption(e.target.value)} placeholder="Describí tu contenido..." rows={2}
             style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
         </div>
@@ -1115,11 +1136,11 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
 
         {/* Reto */}
         <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px",display:"flex",flexDirection:"column",gap:10}}>
-          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5}}>EL RETO</div>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5}}>EL RETO <span style={{color:"#FF6B6B",fontWeight:400}}>(obligatorio)</span></div>
           <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder={challengeType==="trivia"?"Escribí la pregunta...":"Describí qué foto tiene que subir el usuario..."} rows={2}
             style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
           {challengeType==="trivia"&&(
-            <input value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Respuesta correcta..."
+            <input value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Respuesta correcta (obligatorio)..."
               style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
           )}
           <input value={hint} onChange={e=>setHint(e.target.value)} placeholder="Pista (opcional)..."
@@ -1214,15 +1235,15 @@ function PublicProfilePage({ profileId, currentUser, followingIds, onFollowChang
   async function handleFollow() {
     if (isFollowing) {
       await sbFetch(`follows?follower_id=eq.${currentUser.id}&following_id=eq.${profileId}`, { method:"DELETE" });
-      onFollowChange();
+      onFollowChange(); showToast("Dejaste de seguir");
     } else if (pendingFollow) {
       await sbFetch(`follows?follower_id=eq.${currentUser.id}&following_id=eq.${profileId}`, { method:"DELETE" });
-      setPendingFollow(false);
+      setPendingFollow(false); showToast("Solicitud cancelada");
     } else {
       await sbFetch("follows", { method:"POST", body:JSON.stringify({ follower_id:currentUser.id, following_id:profileId, status:"pending" }), headers:{ Prefer:"return=minimal" } });
       await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:profileId, type:"follow_request" }), headers:{ Prefer:"return=minimal" } });
       setPendingFollow(true);
-      onFollowChange();
+      onFollowChange(); showToast("✅ Solicitud enviada");
     }
   }
 
@@ -1410,7 +1431,7 @@ export default function App() {
   if (loading) return (<><GlobalStyles/><div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><Spinner/><div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800}}>Te<span style={{color:"var(--accent)"}}>Reto</span></div></div></>);
 
   return (
-    <><GlobalStyles/>
+    <><GlobalStyles/><ToastProvider/>
     <div style={{minHeight:"100vh",background:"var(--bg)"}}>
       {!user?<LoginPage onLogin={setUser}/>:(
         <>
