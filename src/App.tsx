@@ -87,7 +87,9 @@ const supabase = {
 async function sbFetch(path: string, opts: RequestInit = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...opts, headers: { apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", ...(opts.headers||{}) } });
   if (res.status === 204) return null;
-  return res.json();
+  const text = await res.text();
+  if (!text) return null;
+  return JSON.parse(text);
 }
 
 async function uploadImage(userId: string, file: File): Promise<string|null> {
