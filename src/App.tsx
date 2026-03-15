@@ -1094,11 +1094,11 @@ function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; 
 
   return (
     <div style={{position:"fixed",inset:0,background:"#000",zIndex:80,display:"flex",flexDirection:"column"}}>
-      <video ref={videoRef} playsInline muted style={{flex:1,width:"100%",objectFit:"cover"}}/>
+      <video ref={videoRef} playsInline muted style={{flex:1,width:"100%",objectFit:"cover",maxHeight:"calc(100vh - 120px)"}}/>
       {!ready && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}><Spinner size={40}/></div>}
-      <div style={{padding:"24px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(0,0,0,.6)"}}>
+      <div style={{height:120,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",background:"rgba(0,0,0,.85)"}}>
         <button onClick={close} style={{background:"none",border:"1.5px solid rgba(255,255,255,.3)",borderRadius:99,padding:"10px 20px",color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
-        <button onClick={capture} disabled={!ready} style={{width:70,height:70,borderRadius:"50%",background:"#fff",border:"4px solid rgba(255,255,255,.4)",cursor:ready?"pointer":"default",fontSize:28,display:"flex",alignItems:"center",justifyContent:"center"}}>📸</button>
+        <button onClick={capture} disabled={!ready} style={{width:64,height:64,borderRadius:"50%",background:"#fff",border:"4px solid rgba(255,255,255,.4)",cursor:ready?"pointer":"default",fontSize:26,display:"flex",alignItems:"center",justifyContent:"center"}}>📸</button>
         <div style={{width:80}}/>
       </div>
     </div>
