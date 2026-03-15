@@ -1990,15 +1990,16 @@ export default function App() {
   }
 
   function canSeePost(post: Post): boolean {
-    if (post.user_id === user!.id) return true; // own posts always visible
+    if (post.user_id === user!.id) return true; // own posts always visible (for explore/profile)
+    if (unlockedIds.includes(post.id)) return true; // posts desbloqueados siempre visibles
     const isFollowing = followingIds.includes(post.user_id);
-    if (post.profile?.is_private && !isFollowing) return false; // private account
-    if (post.visibility === "friends" && !isFollowing) return false; // friends-only post
+    if (post.profile?.is_private && !isFollowing) return false; // cuenta privada
+    if (post.visibility === "friends" && !isFollowing) return false; // solo amigos
     return true;
   }
 
   const postsWithUnlocked = posts.map(p=>({...p, unlocked:unlockedIds.includes(p.id)}));
-  const feedPosts = postsWithUnlocked.filter(p => canSeePost(p) && (!p.expires_at || new Date(p.expires_at) > new Date()));
+  const feedPosts = postsWithUnlocked.filter(p => p.user_id !== user?.id && canSeePost(p) && (!p.expires_at || new Date(p.expires_at) > new Date()));
   const sevenDaysAgo = new Date(Date.now()-7*24*3600000);
   const featuredPost = feedPosts.filter(p=>!p.unlocked&&p.user_id!==user?.id&&new Date(p.created_at)>sevenDaysAgo).sort((a,b)=>(b.likes_count||0)-(a.likes_count||0))[0]||null;
 
