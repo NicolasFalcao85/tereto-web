@@ -274,7 +274,7 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
   const [copied, setCopied] = useState(false);
   const [showComments, setShowComments] = useState(false);
   function handleShare() {
-    const url = `${window.location.origin}?post=${post.id}`;
+    const url = `${window.location.origin}/api/share?id=${post.id}`;
     const name = post.profile?.full_name||post.profile?.username||"Alguien";
     const text = `${name} te desafió en TeReto 👀 ¿Podés superar este reto?`;
     if (navigator.share) {
@@ -308,7 +308,12 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
           <span style={{fontSize:18}}>{liked?"❤️":"🤍"}</span>
           <span style={{fontSize:13,fontWeight:600,color:liked?"#FF6B6B":"var(--muted)"}}>{fmt((post.likes_count||0)+(liked?1:0))}</span>
         </button>
-        <button onClick={handleShare} style={{background:"none",border:"none",cursor:"pointer",marginLeft:"auto",color:copied?"var(--accent)":"var(--muted)",fontSize:copied?13:18,fontWeight:copied?700:400,fontFamily:"var(--font-b)",padding:0,transition:"all .2s"}}>{copied?"✅ Copiado":"↗"}</button>
+        <button onClick={handleShare} style={{background:copied?"rgba(232,255,71,.1)":"var(--surface2)",border:`1px solid ${copied?"rgba(232,255,71,.3)":"var(--border)"}`,cursor:"pointer",marginLeft:"auto",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:99,transition:"all .2s",fontFamily:"var(--font-b)"}}>
+          {copied
+            ? <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>✓ Copiado</span>
+            : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--muted)"}}><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg><span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>Compartir</span></>
+          }
+        </button>
       </div>
       {!post.unlocked&&(
         <div onClick={()=>onOpenChallenge(post)} style={{margin:"0 12px 14px",padding:"10px 14px",background:"rgba(232,255,71,.06)",border:"1px solid rgba(232,255,71,.2)",borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
@@ -890,7 +895,7 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
   }
 
   function handleShare(postId: string) {
-    const url = `${window.location.origin}?post=${postId}`;
+    const url = `${window.location.origin}/api/share?id=${postId}`;
     const name = user.user_metadata?.full_name||user.email?.split("@")[0]||"Alguien";
     const text = `${name} te desafió en TeReto 👀 ¿Podés superar este reto?`;
     if (navigator.share) {
