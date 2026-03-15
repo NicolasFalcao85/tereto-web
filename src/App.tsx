@@ -89,7 +89,7 @@ async function sbFetch(path: string, opts: RequestInit = {}) {
   if (res.status === 204) return null;
   const text = await res.text();
   if (!text) return null;
-  return JSON.parse(text);
+  try { return JSON.parse(text); } catch { return null; }
 }
 
 async function uploadImage(userId: string, file: File): Promise<string|null> {
@@ -204,7 +204,7 @@ function UnlockedContent({ post }: { post: Post }) {
   );
 }
 
-function CommentsSection({ postId, currentUser, onProfileTap }: { postId: string; currentUser: User; onProfileTap?: (userId: string)=>void }) {
+function CommentsSection({ postId, currentUser, postOwnerId, onProfileTap }: { postId: string; currentUser: User; postOwnerId?: string; onProfileTap?: (userId: string)=>void }) {
   const [comments, setComments] = useState<{id:string;content:string;created_at:string;profile:Profile}[]>([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
@@ -213,19 +213,29 @@ function CommentsSection({ postId, currentUser, onProfileTap }: { postId: string
   useEffect(()=>{ loadComments(); },[postId]);
 
   async function loadComments() {
-    const data = await sbFetch(`comments?post_id=eq.${postId}&select=*,profile:profiles(id,full_name,username,avatar_url)&order=created_at.asc`);
-    if (Array.isArray(data)) setComments(data);
+    try {
+      const data = await sbFetch(`comments?post_id=eq.${postId}&select=*,profile:profiles(id,full_name,username,avatar_url)&order=created_at.asc`);
+      if (Array.isArray(data)) setComments(data);
+    } catch { /* ignorar, mostrar vacío */ }
     setLoading(false);
   }
 
   async function handleSubmit() {
     if (!newComment.trim()||submitting) return;
     setSubmitting(true);
-    await sbFetch("comments", { method:"POST", body:JSON.stringify({ user_id:currentUser.id, post_id:postId, content:newComment.trim() }), headers:{ Prefer:"return=minimal" } });
-    setNewComment(""); await loadComments(); setSubmitting(false);
+    try {
+      await sbFetch("comments", { method:"POST", body:JSON.stringify({ user_id:currentUser.id, post_id:postId, content:newComment.trim() }), headers:{ Prefer:"return=minimal" } });
+      // Notificar al dueño del post (si no es el mismo usuario)
+      if (postOwnerId && postOwnerId !== currentUser.id) {
+        await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:postOwnerId, type:"new_comment", post_id:postId }), headers:{ Prefer:"return=minimal" } });
+      }
+      setNewComment(""); await loadComments();
+    } catch { /* ignorar */ }
+    setSubmitting(false);
   }
 
   async function handleDelete(commentId: string) {
+    if (!confirm("¿Eliminar este comentario?")) return;
     await sbFetch(`comments?id=eq.${commentId}`, { method:"DELETE" });
     setComments(prev=>prev.filter(c=>c.id!==commentId));
   }
@@ -303,7 +313,7 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
           <button onClick={()=>setShowComments(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,padding:"0 16px 14px",color:"var(--muted)",fontFamily:"var(--font-b)",fontSize:13}}>
             <span style={{fontSize:16}}>💬</span> {showComments?"Ocultar comentarios":"Comentarios"}
           </button>
-          {showComments&&<CommentsSection postId={post.id} currentUser={currentUser} onProfileTap={onProfileTap}/>}
+          {showComments&&<CommentsSection postId={post.id} currentUser={currentUser} postOwnerId={post.user_id} onProfileTap={onProfileTap}/>}
         </>
       )}
     </article>
@@ -365,19 +375,23 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
     if (post.challenge_type==="trivia") {
       if (!answer.trim()||submitting) return;
       setSubmitting(true);
-      const isCorrect = await sbFetch("rpc/validate_trivia_answer", {
-        method: "POST",
-        body: JSON.stringify({ p_post_id: post.id, p_answer: answer.trim() }),
-      });
-      if (isCorrect===true) {
-        setStatus("success"); setTimeout(()=>onUnlock(post.id),1400);
-      } else {
-        await saveAttempt();
-        setAttempts(a=>a-1); setStatus("wrong");
-        setTimeout(()=>{ setStatus("idle"); setSubmitting(false); },1200);
+      try {
+        const isCorrect = await sbFetch("rpc/validate_trivia_answer", {
+          method: "POST",
+          body: JSON.stringify({ p_post_id: post.id, p_answer: answer.trim() }),
+        });
+        if (isCorrect===true) {
+          setStatus("success"); setTimeout(()=>onUnlock(post.id),1400);
+        } else {
+          await saveAttempt();
+          setAttempts(a=>a-1); setStatus("wrong");
+          setTimeout(()=>{ setStatus("idle"); setSubmitting(false); },1200);
+        }
+      } catch {
+        setSubmitting(false);
       }
     } else {
-      if (!photoFile) return;
+      if (!photoFile || status==="uploading") return;
       setStatus("uploading");
       setUploadError("");
       try {
@@ -488,34 +502,39 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
 
   async function loadAll() {
     setLoading(true);
-    // My notifications (approved/rejected)
-    const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(prompt,emoji)&order=created_at.desc&limit=20`);
-    if (Array.isArray(notifData)) setMyNotifs(notifData);
-    // Mark as read
-    await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false`, { method:"PATCH", body:JSON.stringify({read:true}), headers:{Prefer:"return=minimal"} });
-    // Pending reviews of my posts
-    const myPostsData = await sbFetch(`posts?user_id=eq.${user.id}&select=id`);
-    const myPostIds = Array.isArray(myPostsData) ? myPostsData.map((p:{id:string})=>p.id) : [];
-    if (myPostIds.length>0) {
-      const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${myPostIds.join(",")})&select=*,post:posts(${POST_COLS}),challenger:profiles!user_id(*)`);
-      if (Array.isArray(data)) { setPending(data); if(data.length>0) setTab("review"); }
-    }
+    try {
+      // My notifications (approved/rejected)
+      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(prompt,emoji)&order=created_at.desc&limit=20`);
+      if (Array.isArray(notifData)) setMyNotifs(notifData);
+      // Mark as read
+      await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false`, { method:"PATCH", body:JSON.stringify({read:true}), headers:{Prefer:"return=minimal"} });
+      // Pending reviews of my posts
+      const myPostsData = await sbFetch(`posts?user_id=eq.${user.id}&select=id`);
+      const myPostIds = Array.isArray(myPostsData) ? myPostsData.map((p:{id:string})=>p.id) : [];
+      if (myPostIds.length>0) {
+        const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${myPostIds.join(",")})&select=*,post:posts(${POST_COLS}),challenger:profiles!user_id(*)`);
+        if (Array.isArray(data)) { setPending(data); if(data.length>0) setTab("review"); }
+      }
+    } catch { /* mostrar estado vacío */ }
     setLoading(false);
   }
 
   async function handleReview(unlockId: string, approve: boolean, challengerUserId: string, postId: string) {
-    await sbFetch(`unlocks?id=eq.${unlockId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: approve?"approved":"rejected", reviewed_at: new Date().toISOString() }),
-      headers: { Prefer:"return=minimal" }
-    });
-    await sbFetch("notifications", {
-      method: "POST",
-      body: JSON.stringify({ user_id: challengerUserId, type: approve?"unlock_approved":"unlock_rejected", post_id: postId, unlock_id: unlockId }),
-      headers: { Prefer:"return=minimal" }
-    });
-    setPending(prev=>prev.filter(u=>u.id!==unlockId));
-    onReviewed();
+    try {
+      await sbFetch(`unlocks?id=eq.${unlockId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: approve?"approved":"rejected", reviewed_at: new Date().toISOString() }),
+        headers: { Prefer:"return=minimal" }
+      });
+      await sbFetch("notifications", {
+        method: "POST",
+        body: JSON.stringify({ user_id: challengerUserId, type: approve?"unlock_approved":"unlock_rejected", post_id: postId, unlock_id: unlockId }),
+        headers: { Prefer:"return=minimal" }
+      });
+      setPending(prev=>prev.filter(u=>u.id!==unlockId));
+      onReviewed();
+      showToast(approve ? "✅ Foto aprobada" : "❌ Foto rechazada");
+    } catch { showToast("Error al procesar. Intentá de nuevo."); }
   }
 
   return (
@@ -545,14 +564,14 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
               {myNotifs.map(n=>(
                 <div key={n.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{fontSize:28}}>
-                    {n.type==="unlock_approved"?"✅":n.type==="unlock_rejected"?"❌":n.type==="follow_accepted"?"🤝":"👋"}
+                    {n.type==="unlock_approved"?"✅":n.type==="unlock_rejected"?"❌":n.type==="follow_accepted"?"🤝":n.type==="new_comment"?"💬":"👋"}
                   </div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:600,color:n.type==="unlock_approved"||n.type==="follow_accepted"?"var(--accent)":n.type==="unlock_rejected"?"#FF6B6B":"var(--text)"}}>
-                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":n.type==="unlock_rejected"?"Tu foto fue rechazada":n.type==="follow_accepted"?"¡Alguien aceptó tu solicitud!":"Nueva solicitud de seguimiento"}
+                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":n.type==="unlock_rejected"?"Tu foto fue rechazada":n.type==="follow_accepted"?"¡Alguien aceptó tu solicitud!":n.type==="new_comment"?"Alguien comentó en tu reto":"Nueva solicitud de seguimiento"}
                     </div>
                     <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>
-                      {(n.type==="unlock_approved"||n.type==="unlock_rejected")&&n.post?.prompt?.slice(0,50)} • {timeAgo(n.created_at)}
+                      {(n.type==="unlock_approved"||n.type==="unlock_rejected"||n.type==="new_comment")&&n.post?.prompt?.slice(0,50)} • {timeAgo(n.created_at)}
                     </div>
                   </div>
                 </div>
@@ -627,13 +646,15 @@ function SocialLists({ userId, followingIds, onFollowChange, onProfileTap }: { u
 
   async function loadData() {
     setLoading(true);
-    if (tab==="following") {
-      const data = await sbFetch(`follows?follower_id=eq.${userId}&status=eq.accepted&select=profile:profiles!follows_following_id_fkey(id,full_name,username,avatar_url,is_private)`);
-      if (Array.isArray(data)) setFollowing(data.map((f:{profile:Profile})=>f.profile).filter(Boolean));
-    } else {
-      const data = await sbFetch(`follows?following_id=eq.${userId}&status=eq.accepted&select=status,profile:profiles!follows_follower_id_fkey(id,full_name,username,avatar_url,is_private)`);
-      if (Array.isArray(data)) setFollowers(data.filter((f:{profile:Profile})=>f.profile));
-    }
+    try {
+      if (tab==="following") {
+        const data = await sbFetch(`follows?follower_id=eq.${userId}&status=eq.accepted&select=profile:profiles!follows_following_id_fkey(id,full_name,username,avatar_url,is_private)`);
+        if (Array.isArray(data)) setFollowing(data.map((f:{profile:Profile})=>f.profile).filter(Boolean));
+      } else {
+        const data = await sbFetch(`follows?following_id=eq.${userId}&status=eq.accepted&select=status,profile:profiles!follows_follower_id_fkey(id,full_name,username,avatar_url,is_private)`);
+        if (Array.isArray(data)) setFollowers(data.filter((f:{profile:Profile})=>f.profile));
+      }
+    } catch { /* mostrar estado vacío */ }
     setLoading(false);
   }
 
@@ -701,8 +722,10 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
     setSaving(true);
     const body: Record<string,unknown> = { caption, prompt, hint:hint||null, visibility };
     if (post.challenge_type==="trivia" && answer.trim()) body.correct_answer = answer.trim(); // solo actualiza si escribió algo nuevo
-    const data = await sbFetch(`posts?id=eq.${post.id}`, { method:"PATCH", body:JSON.stringify(body), headers:{ Prefer:"return=minimal" } });
-    if (data===null) { onSaved(); onClose(); } else setError("Error al guardar. Intentá de nuevo.");
+    try {
+      const data = await sbFetch(`posts?id=eq.${post.id}`, { method:"PATCH", body:JSON.stringify(body), headers:{ Prefer:"return=minimal" } });
+      if (data===null) { onSaved(); onClose(); } else setError("Error al guardar. Intentá de nuevo.");
+    } catch { setError("Error al guardar. Intentá de nuevo."); }
     setSaving(false);
   }
 
@@ -791,7 +814,9 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
   async function handlePrivacyToggle() {
     const newVal = !isPrivate;
     setIsPrivate(newVal);
-    await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({is_private:newVal}), headers:{Prefer:"return=minimal"} });
+    try {
+      await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({is_private:newVal}), headers:{Prefer:"return=minimal"} });
+    } catch { setIsPrivate(!newVal); } // revertir si falla la red
   }
 
   async function handleFollowRequest(followId: string, accept: boolean, followerId: string) {
@@ -961,7 +986,7 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
   const [tab, setTab] = useState<"posts"|"people"|"ranking">("posts");
 
   useEffect(()=>{
-    sbFetch(`profiles?id=neq.${currentUserId}&select=id,full_name,username,avatar_url,is_private`).then(data=>{
+    sbFetch(`profiles?id=neq.${currentUserId}&select=id,full_name,username,avatar_url,is_private&limit=100`).then(data=>{
       if (Array.isArray(data)) setAllProfiles(data);
     });
     sbFetch(`follows?follower_id=eq.${currentUserId}&status=eq.pending&select=following_id`).then(data=>{
@@ -1388,7 +1413,7 @@ export default function App() {
   useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user){ setUser(s.user); if(!localStorage.getItem("tereto_onboarded")) setShowOnboarding(true); } setLoading(false); }); },[]);
   useEffect(()=>{ if(user){ loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); loadFollowing(); } },[user]);
   useEffect(()=>{
-    if (!user || !sharedPostId || postsLoading || posts.length===0) return;
+    if (!user || !sharedPostId || postsLoading) return;
     async function openShared() {
       let post: Post|undefined = posts.find(p=>p.id===sharedPostId);
       if (!post) {
@@ -1467,7 +1492,7 @@ export default function App() {
       return;
     } else {
       await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"approved" }), headers:{ Prefer:"return=minimal" } });
-      await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({ points:(unlockedIds.length+1)*150 }), headers:{ Prefer:"return=minimal" } });
+      await sbFetch("rpc/award_unlock_points", { method:"POST", body:JSON.stringify({ p_user_id: user.id }) });
       setUnlockedIds(prev=>[...prev,postId]);
     }
     setChallengePost(null);
