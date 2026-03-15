@@ -1,4 +1,5 @@
 {
+  "installCommand": "npm ci",
   "buildCommand": "npx vite build",
   "outputDirectory": "dist",
   "build": {
