@@ -4,8 +4,8 @@ const SUPABASE_URL = "https://aedbqwnsskuznmbywyav.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_XP97uQLTvyBvGvhVTApwDA_V0g1hAmq";
 
 interface User { id: string; email: string; user_metadata: { full_name?: string; avatar_url?: string }; }
-interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; is_private?: boolean; streak_count?: number; }
-interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; expires_at?: string|null; profile?: Profile; unlocked?: boolean; likes_count?: number; }
+interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; is_private?: boolean; streak_count?: number; referral_code?: string|null; }
+interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; expires_at?: string|null; profile?: Profile; unlocked?: boolean; likes_count?: number; attempts_count?: number; }
 interface Follow { id: string; follower_id: string; following_id: string; status: "pending"|"accepted"|"rejected"; created_at: string; profile?: Profile; }
 
 function getToken() { return localStorage.getItem("sb_access_token") ?? ""; }
@@ -124,6 +124,46 @@ async function compressImage(file: File, maxWidth = 1280, quality = 0.82): Promi
   });
 }
 
+async function generateResultImage(post: Post): Promise<File|null> {
+  return new Promise(resolve => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 600; canvas.height = 600;
+    const ctx = canvas.getContext("2d")!;
+    // Fondo
+    ctx.fillStyle = "#0A0A0E"; ctx.fillRect(0,0,600,600);
+    const grad = ctx.createLinearGradient(0,0,600,600);
+    grad.addColorStop(0,"rgba(232,255,71,0.07)"); grad.addColorStop(1,"rgba(232,255,71,0.02)");
+    ctx.fillStyle = grad; ctx.fillRect(0,0,600,600);
+    // Borde
+    ctx.strokeStyle = "rgba(232,255,71,0.2)"; ctx.lineWidth = 2;
+    ctx.roundRect?.(16,16,568,568,24); ctx.stroke?.();
+    // Marca
+    ctx.textAlign = "center"; ctx.font = "bold 28px Syne,sans-serif";
+    ctx.fillStyle = "#F2F2F8"; ctx.fillText("Te",262,72);
+    ctx.fillStyle = "#E8FF47"; ctx.fillText("Reto",316,72);
+    // Emoji del post
+    ctx.font = "96px sans-serif"; ctx.fillText(post.emoji||"🔓",300,210);
+    // ¡Reto superado!
+    ctx.fillStyle = "#E8FF47"; ctx.font = "bold 38px Syne,sans-serif"; ctx.fillText("¡Reto superado!",300,290);
+    // Prompt
+    ctx.fillStyle = "rgba(242,242,248,0.55)"; ctx.font = "18px DM Sans,sans-serif";
+    const words = post.prompt.split(" "); let line = ""; let y = 345;
+    for (const w of words) {
+      const t = line+w+" ";
+      if (ctx.measureText(t).width>520&&line) { ctx.fillText(line.trim(),300,y); y+=28; line=w+" "; }
+      else line=t;
+    }
+    ctx.fillText(line.trim(),300,y);
+    // CTA
+    ctx.fillStyle = "#E8FF47"; ctx.font = "bold 20px Syne,sans-serif"; ctx.fillText("¿Podés superarlo?",300,y+55);
+    ctx.fillStyle = "rgba(242,242,248,0.3)"; ctx.font = "15px DM Sans,sans-serif"; ctx.fillText("tereto-web.vercel.app",300,y+82);
+    canvas.toBlob(blob => {
+      if (!blob) return resolve(null);
+      resolve(new File([blob],"tereto-resultado.png",{type:"image/png"}));
+    },"image/png");
+  });
+}
+
 const GlobalStyles = () => (<style>{`
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -206,6 +246,7 @@ function LockedOverlay({ post, onTap }: { post: Post; onTap: () => void }) {
         <div style={{width:52,height:52,borderRadius:"50%",background:"rgba(232,255,71,.12)",border:"2px solid var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,animation:"unlockPulse 2s ease-in-out infinite"}}>🔒</div>
         <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"#fff",textAlign:"center",padding:"0 24px"}}>Superá el reto para ver el contenido</div>
         <div style={{background:"var(--accent)",color:"#0A0A0E",padding:"6px 16px",borderRadius:99,fontWeight:700,fontSize:13,fontFamily:"var(--font-d)"}}>Ver reto →</div>
+        {(post.attempts_count||0)>0&&<div style={{fontSize:11,color:"rgba(255,255,255,.55)",marginTop:2}}>{post.attempts_count} persona{post.attempts_count!==1?"s":""} intentó este reto</div>}
       </div>
     </div>
   );
@@ -461,6 +502,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
   const [attempts, setAttempts] = useState(post.max_attempts);
   const [attemptsLoaded, setAttemptsLoaded] = useState(false);
   const [status, setStatus] = useState<"idle"|"wrong"|"success"|"pending"|"uploading">("idle");
+  const [sharingResult, setSharingResult] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showHint, setShowHint] = useState(false);
@@ -558,7 +600,20 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
           <div style={{textAlign:"center",padding:"20px 0"}}>
             <div style={{fontSize:64,animation:"pop .4s cubic-bezier(.22,1,.36,1) both",marginBottom:12}}>🔓</div>
             <div style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,color:"var(--accent)",marginBottom:6}}>¡Reto superado!</div>
-            <div style={{color:"var(--muted)",fontSize:14}}>Desbloqueando contenido…</div>
+            <div style={{color:"var(--muted)",fontSize:14,marginBottom:16}}>Desbloqueando contenido…</div>
+            <button disabled={sharingResult} onClick={async()=>{
+              setSharingResult(true);
+              const img = await generateResultImage(post);
+              const url = `${window.location.origin}/api/share?id=${post.id}`;
+              if (img && navigator.canShare?.({files:[img]})) {
+                await navigator.share({ title:"TeReto", text:`¡Superé este reto! ¿Podés vos? 🔥`, files:[img], url }).catch(()=>{});
+              } else {
+                await navigator.clipboard.writeText(`¡Superé este reto en TeReto! ¿Podés vos? 🔥\n${url}`).catch(()=>{});
+              }
+              setSharingResult(false);
+            }} style={{padding:"10px 22px",background:"rgba(232,255,71,.1)",border:"1.5px solid var(--accent)",borderRadius:12,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"var(--accent)"}}>
+              {sharingResult?"Generando…":"Compartir resultado 🔥"}
+            </button>
           </div>
         ) : (status==="pending"||status==="uploading")?(
           <div style={{textAlign:"center",padding:"20px 0"}}>
@@ -959,6 +1014,8 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
   const [copied, setCopied] = useState<string|null>(null);
   const [followRequests, setFollowRequests] = useState<Follow[]>([]);
   const [streak, setStreak] = useState(0);
+  const [referralCode, setReferralCode] = useState<string|null>(null);
+  const [copiedRef, setCopiedRef] = useState(false);
 
   useEffect(()=>{
     sbFetch(`posts?user_id=eq.${user.id}&select=${POST_SELECT}&order=created_at.desc`)
@@ -977,11 +1034,12 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
         if(Array.isArray(unlData)) unlData.forEach((u:{post_id:string;status:string})=>{ if(stats[u.post_id]) { if(u.status==="approved") stats[u.post_id].unlocked++; else if(u.status==="pending") stats[u.post_id].pending++; } });
         setPostStats(stats);
       });
-    sbFetch(`profiles?id=eq.${user.id}&select=username,is_private,streak_count`).then(data=>{
+    sbFetch(`profiles?id=eq.${user.id}&select=username,is_private,streak_count,referral_code`).then(data=>{
       if (Array.isArray(data)&&data.length>0) {
         if (data[0].username) setUsername(data[0].username);
         setIsPrivate(!!data[0].is_private);
         if (data[0].streak_count) setStreak(data[0].streak_count);
+        setReferralCode(data[0].referral_code||null);
       }
     });
     loadFollowRequests();
@@ -1126,6 +1184,30 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
         ))}
       </div>
 
+      {/* Invitar amigos / Referral */}
+      {referralCode&&(
+        <div style={{margin:"12px 16px 0",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:18}}>🎁</span>
+            <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800}}>Invitar amigos</div>
+          </div>
+          <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.5}}>Compartí tu link y cuando se registren ambos ganan puntos extra.</div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <div style={{flex:1,padding:"9px 12px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,fontSize:12,color:"var(--accent)",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {`${APP_URL}?ref=${referralCode}`}
+            </div>
+            <button onClick={()=>{
+              const url = `${APP_URL}?ref=${referralCode}`;
+              const text = `¡Sumate a TeReto, la red social de retos! Usá mi link y ganamos puntos: ${url}`;
+              if (navigator.share) navigator.share({title:"TeReto",text,url}).catch(()=>{});
+              else navigator.clipboard.writeText(url).then(()=>{ setCopiedRef(true); setTimeout(()=>setCopiedRef(false),2000); });
+            }} style={{padding:"9px 14px",background:copiedRef?"rgba(232,255,71,.1)":"var(--accent)",border:`1px solid ${copiedRef?"rgba(232,255,71,.3)":"transparent"}`,borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:12,fontWeight:800,color:copiedRef?"var(--accent)":"#0A0A0E",flexShrink:0}}>
+              {copiedRef?"✓ Copiado":"Compartir"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Following / Followers */}
       <SocialLists userId={user.id} followingIds={followingIds} onFollowChange={onFollowChange} onProfileTap={onProfileTap}/>
 
@@ -1177,6 +1259,7 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
   const [ranking, setRanking] = useState<(Profile&{points:number})[]>([]);
   const [tab, setTab] = useState<"posts"|"people"|"ranking">("posts");
+  const [rankingView, setRankingView] = useState<"global"|"friends">("global");
 
   useEffect(()=>{
     sbFetch(`profiles?id=neq.${currentUserId}&select=id,full_name,username,avatar_url,is_private&limit=100`).then(data=>{
@@ -1274,26 +1357,40 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
             </div>
           ))
         ):(
-          ranking.length===0?(
-            <div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>Sin datos de ranking aún.</div>
-          ):ranking.map((profile,i)=>{
-            const level = Math.floor((profile.points||0)/450)+1;
-            const medals = ["🥇","🥈","🥉"];
-            return (
-              <div key={profile.id} onClick={()=>onProfileTap(profile.id)} style={{background:"var(--surface)",border:`1px solid ${i<3?"rgba(232,255,71,.3)":"var(--border)"}`,borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
-                <div style={{width:32,textAlign:"center",fontSize:i<3?22:14,fontWeight:700,color:"var(--muted)",flexShrink:0}}>{medals[i]||`#${i+1}`}</div>
-                <Avatar size={40} img={profile.avatar_url}/>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:14}}>{profile.full_name||"Usuario"} {profile.id===currentUserId&&<span style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>(vos)</span>}</div>
-                  <div style={{fontSize:12,color:"var(--muted)"}}>{profile.username?`@${profile.username} · `:""} Nivel {level}</div>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:"var(--accent)"}}>{profile.points||0}</div>
-                  <div style={{fontSize:11,color:"var(--muted)"}}>pts</div>
-                </div>
-              </div>
-            );
-          })
+          <>
+            <div style={{display:"flex",gap:8,marginBottom:4}}>
+              {([["global","🌍 Global"],["friends","👥 Amigos"]] as [string,string][]).map(([v,l])=>(
+                <button key={v} onClick={()=>setRankingView(v as "global"|"friends")}
+                  style={{padding:"6px 14px",borderRadius:99,border:`1px solid ${rankingView===v?"var(--accent)":"var(--border2)"}`,background:rankingView===v?"rgba(232,255,71,.08)":"none",cursor:"pointer",fontSize:12,fontWeight:600,color:rankingView===v?"var(--accent)":"var(--muted)",fontFamily:"var(--font-b)"}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {(()=>{
+              const list = rankingView==="friends"
+                ? ranking.filter(p=>followingIds.includes(p.id)||p.id===currentUserId)
+                : ranking;
+              if (list.length===0) return <div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>{rankingView==="friends"?"Seguí a alguien para ver el ranking de amigos.":"Sin datos de ranking aún."}</div>;
+              return list.map((profile,i)=>{
+                const level = Math.floor((profile.points||0)/450)+1;
+                const medals = ["🥇","🥈","🥉"];
+                return (
+                  <div key={profile.id} onClick={()=>onProfileTap(profile.id)} style={{background:"var(--surface)",border:`1px solid ${i<3?"rgba(232,255,71,.3)":"var(--border)"}`,borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+                    <div style={{width:32,textAlign:"center",fontSize:i<3?22:14,fontWeight:700,color:"var(--muted)",flexShrink:0}}>{medals[i]||`#${i+1}`}</div>
+                    <Avatar size={40} img={profile.avatar_url}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:14}}>{profile.full_name||"Usuario"} {profile.id===currentUserId&&<span style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>(vos)</span>}</div>
+                      <div style={{fontSize:12,color:"var(--muted)"}}>{profile.username?`@${profile.username} · `:""} Nivel {level}</div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:"var(--accent)"}}>{profile.points||0}</div>
+                      <div style={{fontSize:11,color:"var(--muted)"}}>pts</div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </>
         )}
       </div>
     </div>
@@ -1659,9 +1756,20 @@ export default function App() {
     if (id) { localStorage.setItem("pending_post_id", id); window.history.replaceState({}, "", window.location.pathname); return id; }
     return localStorage.getItem("pending_post_id");
   });
+  const prevPendingCount = useRef(-1);
+  const refCode = useRef<string|null>(new URLSearchParams(window.location.search).get("ref"));
 
   useEffect(()=>{ supabase.auth.getSession().then(s=>{ if(s?.user){ setUser(s.user); if(!localStorage.getItem("tereto_onboarded")) setShowOnboarding(true); } setLoading(false); }); },[]);
-  useEffect(()=>{ if(user){ loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); loadFollowing(); } },[user]);
+  useEffect(()=>{
+    if(user){
+      loadPosts(); loadUnlocks(); loadLikes(); loadPendingCount(); loadFollowing();
+      // Pedir permiso de notificaciones del navegador
+      if("Notification" in window && Notification.permission==="default") Notification.requestPermission();
+      // Procesar referido si hay código pendiente
+      const ref = refCode.current;
+      if (ref) { refCode.current=null; sbFetch("rpc/process_referral",{method:"POST",body:JSON.stringify({p_referral_code:ref,p_new_user_id:user.id})}); }
+    }
+  },[user]);
   useEffect(()=>{
     if (!user || !sharedPostId || postsLoading) return;
     async function openShared() {
@@ -1681,7 +1789,17 @@ export default function App() {
     setPostsLoading(true);
     try {
       const data = await sbFetch(`posts?select=${POST_SELECT}&order=created_at.desc`);
-      if (Array.isArray(data)) setPosts(data);
+      if (Array.isArray(data)) {
+        const ids = data.map((p:{id:string})=>p.id).join(",");
+        if (ids) {
+          const attData = await sbFetch(`attempts?post_id=in.(${ids})&select=post_id,count`);
+          const attMap: Record<string,number> = {};
+          if (Array.isArray(attData)) attData.forEach((a:{post_id:string;count:number})=>{ attMap[a.post_id]=(attMap[a.post_id]||0)+a.count; });
+          setPosts(data.map((p:{id:string})=>({...p, attempts_count: attMap[p.id]||0})));
+        } else {
+          setPosts(data);
+        }
+      }
     } finally { setPostsLoading(false); }
   }
 
@@ -1717,6 +1835,11 @@ export default function App() {
     const followReqs = await sbFetch(`follows?following_id=eq.${user.id}&status=eq.pending&select=id`);
     if (Array.isArray(followReqs)) count += followReqs.length;
     setPendingCount(count);
+    // Notificación del navegador si aumentaron las notificaciones
+    if (prevPendingCount.current >= 0 && count > prevPendingCount.current && "Notification" in window && Notification.permission==="granted") {
+      new Notification("TeReto 🔔", { body:`Tenés ${count} notificaci${count===1?"ón":"ones"} nuevas`, icon:"/icon.svg", badge:"/icon.svg" });
+    }
+    prevPendingCount.current = count;
   }
 
   async function handleUnlock(postId: string, photoFile?: File) {
@@ -1774,6 +1897,8 @@ export default function App() {
 
   const postsWithUnlocked = posts.map(p=>({...p, unlocked:unlockedIds.includes(p.id)}));
   const feedPosts = postsWithUnlocked.filter(p => canSeePost(p) && (!p.expires_at || new Date(p.expires_at) > new Date()));
+  const sevenDaysAgo = new Date(Date.now()-7*24*3600000);
+  const featuredPost = feedPosts.filter(p=>!p.unlocked&&p.user_id!==user?.id&&new Date(p.created_at)>sevenDaysAgo).sort((a,b)=>(b.likes_count||0)-(a.likes_count||0))[0]||null;
 
   if (loading) return (<><GlobalStyles/><div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><Spinner/><div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800}}>Te<span style={{color:"var(--accent)"}}>Reto</span></div></div></>);
 
@@ -1794,6 +1919,16 @@ export default function App() {
               {postsLoading?<div style={{display:"flex",justifyContent:"center",padding:"60px 0"}}><Spinner/></div>:(
                 <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:16}}>
                   {followingIds.length>0&&<ActivityFeed followingIds={followingIds}/>}
+                  {featuredPost&&(
+                    <div style={{background:"linear-gradient(135deg,rgba(232,255,71,.08),rgba(232,255,71,.03))",border:"1.5px solid rgba(232,255,71,.3)",borderRadius:20,overflow:"hidden"}}>
+                      <div style={{padding:"10px 14px 6px",display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:13}}>⭐</span>
+                        <span style={{fontSize:11,fontWeight:800,color:"var(--accent)",letterSpacing:.5}}>RETO DESTACADO</span>
+                        <span style={{fontSize:11,color:"var(--muted)",marginLeft:"auto"}}>{fmt(featuredPost.likes_count||0)} ❤️</span>
+                      </div>
+                      <FeedCard post={featuredPost} index={0} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} onProfileTap={setViewingProfileId} currentUser={user}/>
+                    </div>
+                  )}
                   {feedPosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} onProfileTap={setViewingProfileId} currentUser={user}/>)}
                   {feedPosts.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>No hay posts todavía. ¡Seguí a alguien o publicá tu primer reto!</div>}
                 </div>
