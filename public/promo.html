@@ -2,41 +2,41 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TeReto — Promo</title>
+<title>TeReto — Promo Story</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#0A0A0E; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:'Inter',sans-serif; }
+  body { background:#111; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:'Inter',sans-serif; }
 
   .card {
     width: 1080px;
-    height: 1080px;
+    height: 1920px;
     background: #0A0A0E;
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 0;
+    justify-content: space-between;
+    padding: 120px 80px 100px;
   }
 
-  /* Fondo con gradiente radial */
+  /* Glow top */
   .card::before {
     content:'';
     position:absolute;
-    top:-200px; left:50%; transform:translateX(-50%);
-    width:900px; height:900px;
-    background: radial-gradient(ellipse at center, rgba(232,255,71,.13) 0%, transparent 65%);
+    top:-100px; left:50%; transform:translateX(-50%);
+    width:1000px; height:800px;
+    background: radial-gradient(ellipse at center, rgba(232,255,71,.12) 0%, transparent 60%);
     pointer-events:none;
   }
+  /* Glow bottom */
   .card::after {
     content:'';
     position:absolute;
-    bottom:-300px; right:-200px;
-    width:700px; height:700px;
-    background: radial-gradient(ellipse at center, rgba(78,205,196,.07) 0%, transparent 65%);
+    bottom:-200px; left:50%; transform:translateX(-50%);
+    width:900px; height:700px;
+    background: radial-gradient(ellipse at center, rgba(78,205,196,.08) 0%, transparent 60%);
     pointer-events:none;
   }
 
@@ -46,127 +46,159 @@
     inset: 0;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    gap: 3px;
-    opacity: 0.18;
-    transform: rotate(-5deg) scale(1.15);
+    grid-template-rows: repeat(5, 1fr);
+    gap: 4px;
+    opacity: 0.13;
+    transform: rotate(-4deg) scale(1.12);
   }
   .post-tile {
-    border-radius: 8px;
+    border-radius: 10px;
     display:flex;
     align-items:center;
     justify-content:center;
-    font-size: 48px;
-    filter: blur(2px);
+    font-size: 52px;
+    filter: blur(3px);
   }
 
-  /* Contenido central */
-  .content {
+  /* TOP — logo */
+  .top {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .logo {
+    font-size: 52px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -2px;
+  }
+  .logo span { color: #E8FF47; }
+
+  .tagline-top {
+    font-size: 20px;
+    font-weight: 500;
+    color: rgba(242,242,248,.35);
+    margin-top: 8px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  /* MIDDLE — contenido principal */
+  .middle {
     position: relative;
     z-index: 10;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: 0 80px;
+    gap: 0;
   }
 
-  .logo {
-    font-size: 28px;
-    font-weight: 900;
-    color: #fff;
-    letter-spacing: -1px;
-    margin-bottom: 48px;
-  }
-  .logo span { color: #E8FF47; }
-
-  .lock-icon {
-    width: 110px;
-    height: 110px;
-    border-radius: 32px;
-    background: rgba(232,255,71,.1);
-    border: 2px solid rgba(232,255,71,.4);
+  .lock-wrap {
+    width: 160px;
+    height: 160px;
+    border-radius: 44px;
+    background: rgba(232,255,71,.08);
+    border: 2px solid rgba(232,255,71,.3);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 56px;
-    margin-bottom: 40px;
-    box-shadow: 0 0 60px rgba(232,255,71,.15);
+    font-size: 84px;
+    margin-bottom: 52px;
+    box-shadow: 0 0 80px rgba(232,255,71,.12), inset 0 0 40px rgba(232,255,71,.05);
   }
 
   .headline {
-    font-size: 72px;
+    font-size: 96px;
     font-weight: 900;
     line-height: 1.0;
     color: #F2F2F8;
-    margin-bottom: 24px;
-    letter-spacing: -2px;
+    letter-spacing: -4px;
+    margin-bottom: 32px;
   }
   .headline .accent { color: #E8FF47; }
 
   .sub {
-    font-size: 26px;
+    font-size: 32px;
     font-weight: 500;
-    color: rgba(242,242,248,.5);
-    line-height: 1.5;
-    margin-bottom: 56px;
-    max-width: 700px;
+    color: rgba(242,242,248,.45);
+    line-height: 1.6;
+    margin-bottom: 72px;
+    max-width: 820px;
   }
 
-  /* Pills de features */
-  .pills {
+  /* Features */
+  .features {
     display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    justify-content: center;
-    margin-bottom: 60px;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: 820px;
+    margin-bottom: 80px;
   }
-  .pill {
-    padding: 10px 22px;
-    border-radius: 99px;
-    border: 1.5px solid rgba(242,242,248,.12);
-    background: rgba(242,242,248,.05);
-    font-size: 18px;
-    font-weight: 600;
-    color: rgba(242,242,248,.7);
+  .feature-row {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    gap: 20px;
+  }
+  .feature {
+    flex: 1;
+    padding: 28px 24px;
+    border-radius: 20px;
+    background: rgba(242,242,248,.04);
+    border: 1.5px solid rgba(242,242,248,.08);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .feature .icon { font-size: 36px; }
+  .feature .fname {
+    font-size: 22px;
+    font-weight: 800;
+    color: #F2F2F8;
+  }
+  .feature .fdesc {
+    font-size: 17px;
+    font-weight: 400;
+    color: rgba(242,242,248,.4);
+    line-height: 1.4;
   }
 
   /* CTA */
-  .cta {
+  .cta-wrap {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 16px;
-    padding: 18px 40px;
+    gap: 20px;
+  }
+  .cta {
+    padding: 28px 64px;
     background: #E8FF47;
-    border-radius: 20px;
-    font-size: 24px;
+    border-radius: 24px;
+    font-size: 34px;
     font-weight: 900;
     color: #0A0A0E;
-    letter-spacing: -.5px;
-    box-shadow: 0 8px 40px rgba(232,255,71,.3);
+    letter-spacing: -1px;
+    box-shadow: 0 12px 60px rgba(232,255,71,.35);
   }
-
-  /* URL abajo */
-  .url {
-    position: absolute;
-    bottom: 52px;
+  .cta-sub {
     font-size: 20px;
-    font-weight: 600;
+    font-weight: 500;
     color: rgba(242,242,248,.25);
     letter-spacing: 1px;
-    z-index: 10;
   }
 
   /* Línea decorativa */
   .deco-line {
     position: absolute;
-    left: 0; right: 0;
+    left: 60px; right: 60px;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(232,255,71,.2), transparent);
-    bottom: 110px;
+    background: linear-gradient(90deg, transparent, rgba(232,255,71,.15), transparent);
+    bottom: 220px;
     z-index: 10;
   }
 </style>
@@ -174,7 +206,6 @@
 <body>
 <div class="card">
 
-  <!-- Grid de posts de fondo -->
   <div class="posts-grid">
     <div class="post-tile" style="background:linear-gradient(135deg,#667eea,#764ba2)">🔒</div>
     <div class="post-tile" style="background:linear-gradient(135deg,#f093fb,#f5576c)">🧠</div>
@@ -185,37 +216,67 @@
     <div class="post-tile" style="background:linear-gradient(135deg,#ffecd2,#fcb69f)">🧩</div>
     <div class="post-tile" style="background:linear-gradient(135deg,#a1c4fd,#c2e9fb)">📷</div>
     <div class="post-tile" style="background:linear-gradient(135deg,#fd7043,#e53935)">🔒</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#667eea,#764ba2)">🎯</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#f093fb,#f5576c)">🔒</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#43e97b,#38f9d7)">🏆</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#fa709a,#fee140)">🔒</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#4facfe,#00f2fe)">⚔️</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#a18cd1,#fbc2eb)">🔒</div>
   </div>
 
-  <div class="content">
+  <!-- TOP -->
+  <div class="top">
     <div class="logo">Te<span>Reto</span></div>
+    <div class="tagline-top">Red social de retos</div>
+  </div>
 
-    <div class="lock-icon">🔒</div>
+  <!-- MIDDLE -->
+  <div class="middle">
+    <div class="lock-wrap">🔒</div>
 
     <div class="headline">
-      El contenido<br>se <span class="accent">desbloquea</span><br>superando retos
+      El contenido<br>se <span class="accent">gana</span><br>superando<br>retos
     </div>
 
     <div class="sub">
-      Trivia, fotos y desafíos 1v1.<br>¿Podés superar el reto para ver qué hay adentro?
+      Para ver una foto tenés que superar<br>el desafío que puso su creador.
     </div>
 
-    <div class="pills">
-      <div class="pill"><span>🧠</span> Trivia</div>
-      <div class="pill"><span>📸</span> Retos de foto</div>
-      <div class="pill"><span>⚔️</span> Duelos 1v1</div>
-      <div class="pill"><span>🏆</span> Ranking</div>
-    </div>
-
-    <div class="cta">
-      <span>⚡</span>
-      Jugá gratis en tereto-web.vercel.app
+    <div class="features">
+      <div class="feature-row">
+        <div class="feature">
+          <div class="icon">🧠</div>
+          <div class="fname">Trivia</div>
+          <div class="fdesc">Respondé bien para desbloquear</div>
+        </div>
+        <div class="feature">
+          <div class="icon">📸</div>
+          <div class="fname">Foto</div>
+          <div class="fdesc">Subí la foto del reto para ver</div>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature">
+          <div class="icon">⚔️</div>
+          <div class="fname">Duelos 1v1</div>
+          <div class="fdesc">Desafiá a tus amigos directo</div>
+        </div>
+        <div class="feature">
+          <div class="icon">🏆</div>
+          <div class="fname">Ranking</div>
+          <div class="fdesc">Subí posiciones ganando puntos</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="deco-line"></div>
-  <div class="url">tereto-web.vercel.app</div>
+  <!-- BOTTOM CTA -->
+  <div class="cta-wrap">
+    <div class="cta">⚡ Jugá gratis</div>
+    <div class="cta-sub">tereto-web.vercel.app</div>
+  </div>
 
+  <div class="deco-line"></div>
 </div>
 </body>
 </html>
