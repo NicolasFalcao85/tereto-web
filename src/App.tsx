@@ -545,7 +545,7 @@ function NotificationsPage({ user, posts, onReviewed }: { user: User; posts: Pos
 }
 
 function BottomNav({ active, onChange, pendingCount }: { active: string; onChange: (id:string)=>void; pendingCount: number }) {
-  const items = [{id:"feed",icon:"🏠",label:"Feed"},{id:"explore",icon:"🔍",label:"Explorar"},{id:"create",icon:"⚡",label:"",accent:true},{id:"notifs",icon:"🔔",label:"Notifs"},{id:"profile",icon:"👤",label:"Perfil"}];
+  const items = [{id:"feed",icon:"🏠",label:"Feed"},{id:"explore",icon:"🔍",label:"Explorar"},{id:"create",icon:"⚡",label:"",accent:true},{id:"notifs",icon:"🔔",label:"Notificaciones"},{id:"profile",icon:"👤",label:"Perfil"}];
   return (
     <nav style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(10,10,14,.95)",backdropFilter:"blur(16px)",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-around",alignItems:"center",padding:"10px 0 20px",zIndex:20}}>
       {items.map(item=>(
