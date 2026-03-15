@@ -1442,7 +1442,7 @@ export default function App() {
     if (post.challenge_type==="photo" && photoFile) {
       const photo_url = await uploadImage(user.id, photoFile);
       if (!photo_url) throw new Error("No se pudo subir la foto. Verificá tu conexión.");
-      const result = await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
+      const result = await sbFetch("unlocks?on_conflict=user_id,post_id", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"resolution=merge-duplicates,return=minimal" } });
       if (result && result.message) throw new Error(result.message);
       return;
     } else {
