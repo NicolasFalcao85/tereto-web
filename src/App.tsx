@@ -506,9 +506,11 @@ interface PendingUnlock { id: string; photo_url: string; unlocked_at: string; po
 
 function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>void }) {
   const [pending, setPending] = useState<PendingUnlock[]>([]);
-  const [myNotifs, setMyNotifs] = useState<{id:string;type:string;post:Post;created_at:string;read:boolean}[]>([]);
+  const [myNotifs, setMyNotifs] = useState<{id:string;type:string;post:Post;unlock?:{reject_reason:string|null};created_at:string;read:boolean}[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"mine"|"review">("mine");
+  const [rejectingId, setRejectingId] = useState<string|null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   useEffect(()=>{ loadAll(); },[]);
 
@@ -516,7 +518,7 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
     setLoading(true);
     try {
       // My notifications (approved/rejected)
-      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(prompt,emoji)&order=created_at.desc&limit=20`);
+      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(prompt,emoji),unlock:unlocks(reject_reason)&order=created_at.desc&limit=20`);
       if (Array.isArray(notifData)) setMyNotifs(notifData);
       // Mark as read
       await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false`, { method:"PATCH", body:JSON.stringify({read:true}), headers:{Prefer:"return=minimal"} });
@@ -531,11 +533,11 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
     setLoading(false);
   }
 
-  async function handleReview(unlockId: string, approve: boolean, challengerUserId: string, postId: string) {
+  async function handleReview(unlockId: string, approve: boolean, challengerUserId: string, postId: string, reason?: string) {
     try {
       await sbFetch(`unlocks?id=eq.${unlockId}`, {
         method: "PATCH",
-        body: JSON.stringify({ status: approve?"approved":"rejected", reviewed_at: new Date().toISOString() }),
+        body: JSON.stringify({ status: approve?"approved":"rejected", reviewed_at: new Date().toISOString(), ...(reason?.trim() ? { reject_reason: reason.trim() } : {}) }),
         headers: { Prefer:"return=minimal" }
       });
       await sbFetch("notifications", {
@@ -544,6 +546,7 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
         headers: { Prefer:"return=minimal" }
       });
       setPending(prev=>prev.filter(u=>u.id!==unlockId));
+      if (!approve) { setRejectingId(null); setRejectReason(""); }
       onReviewed();
       showToast(approve ? "✅ Foto aprobada" : "❌ Foto rechazada");
     } catch { showToast("Error al procesar. Intentá de nuevo."); }
@@ -585,6 +588,11 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
                     <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>
                       {(n.type==="unlock_approved"||n.type==="unlock_rejected"||n.type==="new_comment")&&n.post?.prompt?.slice(0,50)} • {timeAgo(n.created_at)}
                     </div>
+                    {n.type==="unlock_rejected"&&n.unlock?.reject_reason&&(
+                      <div style={{marginTop:6,padding:"6px 10px",background:"rgba(255,107,107,.06)",border:"1px solid rgba(255,107,107,.2)",borderRadius:8,fontSize:12,color:"#FF6B6B",fontStyle:"italic"}}>
+                        "{n.unlock.reject_reason}"
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -612,16 +620,35 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
                     <span style={{color:"var(--text)",fontWeight:500}}>Reto: </span>{u.post?.prompt}
                   </div>
                   {u.photo_url&&<img src={u.photo_url} style={{width:"100%",maxHeight:280,objectFit:"cover",display:"block"}} alt="foto del reto"/>}
-                  <div style={{padding:"12px 14px",display:"flex",gap:8}}>
-                    <button onClick={()=>handleReview(u.id,true,u.challenger?.id,u.post?.id)}
-                      style={{flex:1,padding:"11px",background:"rgba(232,255,71,.1)",border:"1.5px solid var(--accent)",borderRadius:12,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"var(--accent)"}}>
-                      ✅ Aprobar
-                    </button>
-                    <button onClick={()=>handleReview(u.id,false,u.challenger?.id,u.post?.id)}
-                      style={{flex:1,padding:"11px",background:"rgba(255,107,107,.08)",border:"1.5px solid #FF6B6B",borderRadius:12,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"#FF6B6B"}}>
-                      ❌ Rechazar
-                    </button>
-                  </div>
+                  {rejectingId===u.id?(
+                    <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                      <div style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>¿Por qué rechazás esta foto?</div>
+                      <textarea value={rejectReason} onChange={e=>setRejectReason(e.target.value)} autoFocus rows={2}
+                        placeholder="Ej: La foto no corresponde al reto pedido... (opcional)"
+                        style={{width:"100%",background:"var(--surface2)",border:"1.5px solid #FF6B6B",borderRadius:10,padding:"10px 12px",color:"var(--text)",fontSize:13,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={()=>{setRejectingId(null);setRejectReason("");}}
+                          style={{flex:1,padding:"10px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,cursor:"pointer",color:"var(--muted)",fontFamily:"var(--font-b)",fontSize:13}}>
+                          Cancelar
+                        </button>
+                        <button onClick={()=>handleReview(u.id,false,u.challenger?.id,u.post?.id,rejectReason)}
+                          style={{flex:2,padding:"10px",background:"rgba(255,107,107,.1)",border:"1.5px solid #FF6B6B",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"#FF6B6B"}}>
+                          ❌ Confirmar rechazo
+                        </button>
+                      </div>
+                    </div>
+                  ):(
+                    <div style={{padding:"12px 14px",display:"flex",gap:8}}>
+                      <button onClick={()=>handleReview(u.id,true,u.challenger?.id,u.post?.id)}
+                        style={{flex:1,padding:"11px",background:"rgba(232,255,71,.1)",border:"1.5px solid var(--accent)",borderRadius:12,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"var(--accent)"}}>
+                        ✅ Aprobar
+                      </button>
+                      <button onClick={()=>setRejectingId(u.id)}
+                        style={{flex:1,padding:"11px",background:"rgba(255,107,107,.08)",border:"1.5px solid #FF6B6B",borderRadius:12,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"#FF6B6B"}}>
+                        ❌ Rechazar
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
