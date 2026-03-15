@@ -1064,52 +1064,9 @@ const GRADIENTS = [
   "linear-gradient(135deg,#30cfd0,#667eea)",
 ];
 
-function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; onClose: () => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream|null>(null);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-      .then(s => { setStream(s); if (videoRef.current) { videoRef.current.srcObject = s; videoRef.current.play(); setReady(true); } })
-      .catch(() => onClose());
-    return () => { stream?.getTracks().forEach(t => t.stop()); };
-  }, []);
-
-  function capture() {
-    if (!videoRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    canvas.getContext("2d")!.drawImage(videoRef.current, 0, 0);
-    canvas.toBlob(blob => {
-      if (!blob) return;
-      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
-      stream?.getTracks().forEach(t => t.stop());
-      onCapture(file);
-    }, "image/jpeg", 0.9);
-  }
-
-  function close() { stream?.getTracks().forEach(t => t.stop()); onClose(); }
-
-  return (
-    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#000",zIndex:80}}>
-      <video ref={videoRef} playsInline muted style={{position:"absolute",top:0,left:0,right:0,bottom:110,width:"100%",height:"calc(100% - 110px)",objectFit:"cover"}}/>
-      {!ready && <div style={{position:"absolute",top:0,left:0,right:0,bottom:110,display:"flex",alignItems:"center",justifyContent:"center"}}><Spinner size={40}/></div>}
-      <div style={{position:"absolute",bottom:0,left:0,right:0,height:110,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",background:"rgba(0,0,0,.85)"}}>
-        <button onClick={close} style={{background:"none",border:"1.5px solid rgba(255,255,255,.3)",borderRadius:99,padding:"10px 20px",color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
-        <button onClick={capture} disabled={!ready} style={{width:64,height:64,borderRadius:"50%",background:"#fff",border:"4px solid rgba(255,255,255,.4)",cursor:ready?"pointer":"default",fontSize:26,display:"flex",alignItems:"center",justifyContent:"center"}}>📸</button>
-        <div style={{width:80}}/>
-      </div>
-    </div>
-  );
-}
-
 function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }) {
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState<string|null>(null);
-  const [showCamera, setShowCamera] = useState(false);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [gradient, setGradient] = useState(GRADIENTS[0]);
   const [caption, setCaption] = useState("");
   const [visibility, setVisibility] = useState<"public"|"friends">("public");
@@ -1123,10 +1080,6 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFilePreview(file);
-  }
-
-  function setFilePreview(file: File) {
     setImageFile(file);
     const reader = new FileReader();
     reader.onload = ev => setImagePreview(ev.target?.result as string);
@@ -1180,15 +1133,15 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
             </div>
           )}
           <div style={{display:"flex",borderTop:"1px solid var(--border)"}}>
-            <button onClick={()=>setShowCamera(true)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--accent)",background:"none",border:"none",borderRight:"1px solid var(--border)"}}>
+            <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--accent)",borderRight:"1px solid var(--border)"}}>
               📷 Cámara
-            </button>
-            <button onClick={()=>galleryInputRef.current?.click()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--muted)",background:"none",border:"none"}}>
+              <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleImageChange}/>
+            </label>
+            <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--muted)"}}>
               🖼️ Galería
-            </button>
-            <input ref={galleryInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageChange}/>
+              <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageChange}/>
+            </label>
           </div>
-          {showCamera&&<CameraModal onCapture={f=>{setFilePreview(f);setShowCamera(false);}} onClose={()=>setShowCamera(false)}/>}
           {!imagePreview&&(
             <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
               <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>O elegí un color de fondo:</div>
