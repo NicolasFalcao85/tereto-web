@@ -376,15 +376,16 @@ function ReactionsBar({ postId, currentUserId }: { postId: string; currentUserId
   );
 }
 
-function DuelModal({ challengedPost, currentUser, onClose }: { challengedPost: Post; currentUser: User; onClose: ()=>void }) {
-  const [myPosts, setMyPosts] = useState<Post[]>([]);
+function DuelModal({ post, currentUser, onClose }: { post: Post; currentUser: User; onClose: ()=>void }) {
+  const [following, setFollowing] = useState<Profile[]>([]);
+  const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string|null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
   useEffect(()=>{
-    sbFetch(`posts?user_id=eq.${currentUser.id}&select=${POST_COLS}&order=created_at.desc&limit=10`)
-      .then(data=>{ if(Array.isArray(data)) setMyPosts(data); });
+    sbFetch(`follows?follower_id=eq.${currentUser.id}&status=eq.accepted&select=profile:profiles!follows_following_id_fkey(id,full_name,username,avatar_url)`)
+      .then(data=>{ if(Array.isArray(data)) setFollowing(data.map((f:{profile:Profile})=>f.profile).filter(Boolean)); });
   },[currentUser.id]);
 
   async function handleSend() {
@@ -393,13 +394,13 @@ function DuelModal({ challengedPost, currentUser, onClose }: { challengedPost: P
     try {
       const duelData = await sbFetch("duels", {
         method:"POST",
-        body:JSON.stringify({ challenger_id:currentUser.id, challenged_id:challengedPost.user_id, challenger_post_id:selectedId, challenged_post_id:challengedPost.id, status:"pending" }),
+        body:JSON.stringify({ challenger_id:currentUser.id, challenged_id:selectedId, challenger_post_id:post.id, challenged_post_id:post.id, status:"pending" }),
         headers:{ Prefer:"return=representation" }
       });
       const duelId = Array.isArray(duelData)&&duelData.length>0 ? duelData[0].id : null;
       await sbFetch("notifications", {
         method:"POST",
-        body:JSON.stringify({ user_id:challengedPost.user_id, type:"duel_request", post_id:selectedId, duel_id:duelId }),
+        body:JSON.stringify({ user_id:selectedId, type:"duel_request", post_id:post.id, duel_id:duelId }),
         headers:{ Prefer:"return=minimal" }
       });
       setSent(true);
@@ -409,54 +410,56 @@ function DuelModal({ challengedPost, currentUser, onClose }: { challengedPost: P
     setSending(false);
   }
 
+  const filtered = search ? following.filter(u=>(u.full_name||"").toLowerCase().includes(search.toLowerCase())||(u.username||"").toLowerCase().includes(search.toLowerCase())) : following;
+
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"24px 20px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
-        <div style={{display:"flex",alignItems:"center",marginBottom:16}}>
-          <div style={{flex:1}}/>
-          <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)"}}/>
-          <div style={{flex:1,display:"flex",justifyContent:"flex-end"}}>
-            <button onClick={onClose} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,width:28,height:28,cursor:"pointer",color:"var(--muted)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+        {/* Header fijo */}
+        <div style={{padding:"20px 20px 0",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",marginBottom:14}}>
+            <div style={{flex:1}}/>
+            <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)"}}/>
+            <div style={{flex:1,display:"flex",justifyContent:"flex-end"}}>
+              <button onClick={onClose} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,width:28,height:28,cursor:"pointer",color:"var(--muted)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            </div>
           </div>
+          <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:4}}>⚔️ Duelo 1v1</div>
+          <div style={{fontSize:13,color:"var(--muted)",marginBottom:10,lineHeight:1.5}}>Los dos intentan el mismo reto. Gana quien lo supera primero.</div>
+          <div style={{padding:"9px 12px",background:"rgba(232,255,71,.05)",border:"1px solid rgba(232,255,71,.15)",borderRadius:10,marginBottom:12,fontSize:12,color:"var(--muted)"}}>
+            <span style={{color:"var(--text)",fontWeight:600}}>Reto: </span>{post.prompt.slice(0,70)}{post.prompt.length>70?"…":""}
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..."
+            style={{width:"100%",padding:"9px 12px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:10,color:"var(--text)",fontSize:13,fontFamily:"var(--font-b)",outline:"none",marginBottom:10}}/>
         </div>
-        <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:4}}>⚔️ Duelo 1v1</div>
-        <div style={{fontSize:13,color:"var(--muted)",marginBottom:14,lineHeight:1.5}}>Elegí uno de tus retos. Vos jugás el de ellos, ellos juegan el tuyo.</div>
-        {/* Reto del rival */}
-        <div style={{padding:"10px 12px",background:"rgba(255,107,107,.06)",border:"1px solid rgba(255,107,107,.2)",borderRadius:12,marginBottom:14,fontSize:12}}>
-          <span style={{color:"var(--muted)"}}>Su reto: </span>
-          <span style={{color:"var(--text)",fontWeight:600}}>{challengedPost.prompt.slice(0,60)}{challengedPost.prompt.length>60?"…":""}</span>
-        </div>
-        {sent?(
-          <div style={{textAlign:"center",padding:"20px 0",fontSize:32}}>⚔️<div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,marginTop:8,color:"var(--accent)"}}>¡Duelo enviado!</div></div>
-        ):(
-          <>
-            <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>TU RETO CONTRA-ATAQUE</div>
-            {myPosts.length===0?(
-              <div style={{textAlign:"center",padding:"24px",color:"var(--muted)",fontSize:13}}>No tenés retos publicados aún.</div>
-            ):(
-              <div style={{overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
-                {myPosts.map(p=>{
-                  const sel = selectedId===p.id;
-                  return (
-                    <div key={p.id} onClick={()=>setSelectedId(p.id)}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:sel?"rgba(232,255,71,.08)":"var(--surface2)",border:`1.5px solid ${sel?"var(--accent)":"var(--border2)"}`,borderRadius:12,cursor:"pointer",transition:"all .15s"}}>
-                      <div style={{width:40,height:40,borderRadius:10,background:p.image_url?`url(${p.image_url})`:(p.gradient||"var(--surface)"),backgroundSize:"cover",backgroundPosition:"center",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0,overflow:"hidden"}}>{!p.image_url&&p.emoji}</div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:sel?"var(--accent)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.caption}</div>
-                        <div style={{fontSize:11,color:"var(--muted)"}}>{p.challenge_type==="trivia"?"🧠 Trivia":"📸 Foto"}</div>
-                      </div>
-                      {sel&&<span style={{color:"var(--accent)",fontSize:16}}>✓</span>}
-                    </div>
-                  );
-                })}
+        {/* Lista scrollable */}
+        <div style={{overflowY:"auto",flex:1,padding:"0 20px"}}>
+          {sent?(
+            <div style={{textAlign:"center",padding:"24px 0",fontSize:32}}>⚔️<div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,marginTop:8,color:"var(--accent)"}}>¡Duelo enviado!</div></div>
+          ):following.length===0?(
+            <div style={{textAlign:"center",padding:"24px",color:"var(--muted)",fontSize:13}}>Seguí a alguien para poder retarlo.</div>
+          ):filtered.map(u=>{
+            const sel = selectedId===u.id;
+            return (
+              <div key={u.id} onClick={()=>setSelectedId(sel?null:u.id)}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:sel?"rgba(232,255,71,.08)":"var(--surface2)",border:`1.5px solid ${sel?"var(--accent)":"var(--border2)"}`,borderRadius:12,cursor:"pointer",marginBottom:8,transition:"all .15s"}}>
+                <Avatar size={38} img={u.avatar_url}/>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600,fontSize:13,color:sel?"var(--accent)":"var(--text)"}}>{u.full_name||"Usuario"}</div>
+                  {u.username&&<div style={{fontSize:11,color:"var(--muted)"}}>@{u.username}</div>}
+                </div>
+                {sel&&<span style={{color:"var(--accent)",fontSize:16}}>✓</span>}
               </div>
-            )}
-            <button onClick={handleSend} disabled={!selectedId||sending}
-              style={{width:"100%",padding:"14px",background:selectedId&&!sending?"var(--accent)":"var(--surface2)",border:"none",borderRadius:14,cursor:selectedId&&!sending?"pointer":"default",fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:selectedId&&!sending?"#0A0A0E":"var(--muted)"}}>
-              {sending?"Enviando…":"⚔️ Enviar duelo"}
-            </button>
-          </>
-        )}
+            );
+          })}
+        </div>
+        {/* Botón fijo abajo */}
+        <div style={{padding:"12px 20px 36px",flexShrink:0}}>
+          <button onClick={handleSend} disabled={!selectedId||sending||sent}
+            style={{width:"100%",padding:"14px",background:selectedId&&!sending&&!sent?"var(--accent)":"var(--surface2)",border:"none",borderRadius:14,cursor:selectedId&&!sending&&!sent?"pointer":"default",fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:selectedId&&!sending&&!sent?"#0A0A0E":"var(--muted)"}}>
+            {sending?"Enviando…":"⚔️ Enviar duelo"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -531,7 +534,7 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
           {showComments&&<CommentsSection postId={post.id} currentUser={currentUser} postOwnerId={post.user_id} onProfileTap={onProfileTap}/>}
         </>
       )}
-      {showChallengeModal&&currentUser&&<DuelModal challengedPost={post} currentUser={currentUser} onClose={()=>setShowChallengeModal(false)}/>}
+      {showChallengeModal&&currentUser&&<DuelModal post={post} currentUser={currentUser} onClose={()=>setShowChallengeModal(false)}/>}
     </article>
   );
 }
