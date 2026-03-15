@@ -1203,10 +1203,7 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
     <div style={{maxWidth:520,margin:"0 auto",padding:"0 0 80px",animation:"fadeUp .35s ease both"}}>
       <div style={{padding:"52px 20px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <h2 style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800}}>Mi perfil</h2>
-        <div style={{display:"flex",gap:8}}>
-          {onInstall&&<button onClick={onInstall} style={{background:"var(--accent)",border:"none",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"#0A0A0E",fontSize:13,fontWeight:800,fontFamily:"var(--font-d)"}}>⚡ Instalar</button>}
-          <button onClick={onLogout} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"var(--muted)",fontSize:13,fontFamily:"var(--font-b)"}}>Salir</button>
-        </div>
+        <button onClick={onLogout} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"var(--muted)",fontSize:13,fontFamily:"var(--font-b)"}}>Salir</button>
       </div>
 
       {/* Info */}
@@ -1287,6 +1284,18 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
           </div>
         ))}
       </div>
+
+      {/* Instalar app */}
+      {onInstall&&(
+        <div style={{margin:"12px 16px 0",background:"var(--surface)",border:"1px solid rgba(232,255,71,.3)",borderRadius:16,padding:"16px",display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontSize:28}}>⚡</span>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800}}>Instalá TeReto</div>
+            <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>Accedé desde tu pantalla de inicio</div>
+          </div>
+          <button onClick={onInstall} style={{padding:"9px 16px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#0A0A0E",flexShrink:0}}>Instalar</button>
+        </div>
+      )}
 
       {/* Invitar amigos / Referral */}
       {referralCode&&(
