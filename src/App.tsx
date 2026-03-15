@@ -104,6 +104,26 @@ async function uploadImage(userId: string, file: File): Promise<string|null> {
   return `${SUPABASE_URL}/storage/v1/object/public/posts/${path}`;
 }
 
+async function compressImage(file: File, maxWidth = 1280, quality = 0.82): Promise<File> {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(1, maxWidth / img.width, maxWidth / img.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => {
+        URL.revokeObjectURL(img.src);
+        if (!blob) return resolve(file);
+        resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+      }, "image/jpeg", quality);
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 const GlobalStyles = () => (<style>{`
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -269,10 +289,103 @@ function CommentsSection({ postId, currentUser, postOwnerId, onProfileTap }: { p
   );
 }
 
+const REACTION_EMOJIS = ["🔥","❤️","😂","😮","💪"];
+
+function ReactionsBar({ postId, currentUserId }: { postId: string; currentUserId: string }) {
+  const [reactions, setReactions] = useState<{type:string;count:number;mine:boolean}[]>(
+    REACTION_EMOJIS.map(e=>({type:e,count:0,mine:false}))
+  );
+
+  useEffect(()=>{
+    sbFetch(`reactions?post_id=eq.${postId}&select=type,user_id`)
+      .then(data=>{
+        if(!Array.isArray(data)) return;
+        const map: Record<string,{count:number;mine:boolean}> = {};
+        REACTION_EMOJIS.forEach(e=>{ map[e]={count:0,mine:false}; });
+        data.forEach((r:{type:string;user_id:string})=>{
+          if(map[r.type]) { map[r.type].count++; if(r.user_id===currentUserId) map[r.type].mine=true; }
+        });
+        setReactions(REACTION_EMOJIS.map(e=>({type:e,...map[e]})));
+      });
+  },[postId]);
+
+  async function handleReact(type: string) {
+    const cur = reactions.find(r=>r.type===type);
+    if(cur?.mine) {
+      await sbFetch(`reactions?user_id=eq.${currentUserId}&post_id=eq.${postId}`, {method:"DELETE"});
+      setReactions(prev=>prev.map(r=>r.type===type?{...r,count:Math.max(0,r.count-1),mine:false}:r));
+    } else {
+      // Eliminar reacción previa si existe
+      await sbFetch(`reactions?user_id=eq.${currentUserId}&post_id=eq.${postId}`, {method:"DELETE"});
+      await sbFetch("reactions", {method:"POST",body:JSON.stringify({user_id:currentUserId,post_id:postId,type}),headers:{Prefer:"return=minimal"}});
+      setReactions(prev=>prev.map(r=>r.type===type?{...r,count:r.count+1,mine:true}:{...r,mine:false}));
+    }
+  }
+
+  return (
+    <div style={{padding:"2px 16px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
+      {reactions.map(r=>(
+        <button key={r.type} onClick={()=>handleReact(r.type)}
+          style={{background:r.mine?"rgba(232,255,71,.1)":"var(--surface2)",border:`1px solid ${r.mine?"rgba(232,255,71,.35)":"var(--border)"}`,borderRadius:99,padding:"5px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:4,transition:"all .15s"}}>
+          <span style={{fontSize:16}}>{r.type}</span>
+          {r.count>0&&<span style={{fontSize:11,fontWeight:700,color:r.mine?"var(--accent)":"var(--muted)"}}>{r.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ChallengeUserModal({ postId, currentUserId, onClose }: { postId: string; currentUserId: string; onClose: ()=>void }) {
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [search, setSearch] = useState("");
+  const [sent, setSent] = useState<string[]>([]);
+
+  useEffect(()=>{
+    sbFetch(`follows?follower_id=eq.${currentUserId}&status=eq.accepted&select=profile:profiles!follows_following_id_fkey(id,full_name,username,avatar_url)`)
+      .then(data=>{ if(Array.isArray(data)) setUsers(data.map((f:{profile:Profile})=>f.profile).filter(Boolean)); });
+  },[currentUserId]);
+
+  async function handleChallenge(targetId: string, name: string) {
+    await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:targetId, type:"direct_challenge", post_id:postId }), headers:{ Prefer:"return=minimal" } });
+    setSent(prev=>[...prev,targetId]);
+    showToast(`🎯 Reto enviado a ${name}`);
+  }
+
+  const filtered = search ? users.filter(u=>(u.full_name||"").toLowerCase().includes(search.toLowerCase())||(u.username||"").toLowerCase().includes(search.toLowerCase())) : users;
+
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
+        <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)",margin:"0 auto 18px"}}/>
+        <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:14}}>🎯 Desafiar a alguien</div>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..."
+          style={{padding:"10px 14px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",marginBottom:12}}/>
+        <div style={{overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:8}}>
+          {users.length===0&&<div style={{textAlign:"center",padding:"24px",color:"var(--muted)",fontSize:13}}>Seguí a alguien para poder desafiarlos.</div>}
+          {filtered.map(u=>(
+            <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px",background:"var(--surface2)",borderRadius:12}}>
+              <Avatar size={38} img={u.avatar_url}/>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:13}}>{u.full_name||"Usuario"}</div>
+                {u.username&&<div style={{fontSize:11,color:"var(--muted)"}}>@{u.username}</div>}
+              </div>
+              <button onClick={()=>!sent.includes(u.id)&&handleChallenge(u.id, u.full_name||u.username||"Usuario")}
+                style={{padding:"7px 14px",borderRadius:99,border:`1.5px solid ${sent.includes(u.id)?"var(--border2)":"var(--accent)"}`,background:sent.includes(u.id)?"var(--surface)":"rgba(232,255,71,.1)",cursor:sent.includes(u.id)?"default":"pointer",fontSize:12,fontWeight:700,color:sent.includes(u.id)?"var(--muted)":"var(--accent)",fontFamily:"var(--font-b)"}}>
+                {sent.includes(u.id)?"✓ Enviado":"🎯 Desafiar"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap, currentUser }: { post: Post; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; index: number; onProfileTap?: (userId: string)=>void; currentUser?: User }) {
   const liked = likedIds.includes(post.id);
   const [copied, setCopied] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showChallengeModal, setShowChallengeModal] = useState(false);
   function handleShare() {
     const url = `${window.location.origin}/api/share?id=${post.id}`;
     const name = post.profile?.full_name||post.profile?.username||"Alguien";
@@ -308,7 +421,10 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
           <span style={{fontSize:18}}>{liked?"❤️":"🤍"}</span>
           <span style={{fontSize:13,fontWeight:600,color:liked?"#FF6B6B":"var(--muted)"}}>{fmt((post.likes_count||0)+(liked?1:0))}</span>
         </button>
-        <button onClick={handleShare} style={{background:copied?"rgba(232,255,71,.1)":"var(--surface2)",border:`1px solid ${copied?"rgba(232,255,71,.3)":"var(--border)"}`,cursor:"pointer",marginLeft:"auto",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:99,transition:"all .2s",fontFamily:"var(--font-b)"}}>
+        {currentUser&&<button onClick={()=>setShowChallengeModal(true)} style={{background:"var(--surface2)",border:"1px solid var(--border)",cursor:"pointer",marginLeft:"auto",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:99,fontFamily:"var(--font-b)"}}>
+          <span style={{fontSize:14}}>🎯</span><span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>Desafiar</span>
+        </button>}
+        <button onClick={handleShare} style={{background:copied?"rgba(232,255,71,.1)":"var(--surface2)",border:`1px solid ${copied?"rgba(232,255,71,.3)":"var(--border)"}`,cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:99,transition:"all .2s",fontFamily:"var(--font-b)"}}>
           {copied
             ? <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>✓ Copiado</span>
             : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--muted)"}}><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg><span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>Compartir</span></>
@@ -327,12 +443,14 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
       )}
       {post.unlocked&&currentUser&&(
         <>
+          <ReactionsBar postId={post.id} currentUserId={currentUser.id}/>
           <button onClick={()=>setShowComments(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,padding:"0 16px 14px",color:"var(--muted)",fontFamily:"var(--font-b)",fontSize:13}}>
             <span style={{fontSize:16}}>💬</span> {showComments?"Ocultar comentarios":"Comentarios"}
           </button>
           {showComments&&<CommentsSection postId={post.id} currentUser={currentUser} postOwnerId={post.user_id} onProfileTap={onProfileTap}/>}
         </>
       )}
+      {showChallengeModal&&currentUser&&<ChallengeUserModal postId={post.id} currentUserId={currentUser.id} onClose={()=>setShowChallengeModal(false)}/>}
     </article>
   );
 }
@@ -372,10 +490,12 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
   function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setPhotoFile(file);
-    const reader = new FileReader();
-    reader.onload = ev => setPhotoPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    compressImage(file).then(compressed => {
+      setPhotoFile(compressed);
+      const reader = new FileReader();
+      reader.onload = ev => setPhotoPreview(ev.target?.result as string);
+      reader.readAsDataURL(compressed);
+    });
   }
 
   async function saveAttempt() {
@@ -584,11 +704,11 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
               {myNotifs.map(n=>(
                 <div key={n.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{fontSize:28}}>
-                    {n.type==="unlock_approved"?"✅":n.type==="unlock_rejected"?"❌":n.type==="follow_accepted"?"🤝":n.type==="new_comment"?"💬":"👋"}
+                    {n.type==="unlock_approved"?"✅":n.type==="unlock_rejected"?"❌":n.type==="follow_accepted"?"🤝":n.type==="new_comment"?"💬":n.type==="direct_challenge"?"🎯":"👋"}
                   </div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:600,color:n.type==="unlock_approved"||n.type==="follow_accepted"?"var(--accent)":n.type==="unlock_rejected"?"#FF6B6B":"var(--text)"}}>
-                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":n.type==="unlock_rejected"?"Tu foto fue rechazada":n.type==="follow_accepted"?"¡Alguien aceptó tu solicitud!":n.type==="new_comment"?"Alguien comentó en tu reto":"Nueva solicitud de seguimiento"}
+                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":n.type==="unlock_rejected"?"Tu foto fue rechazada":n.type==="follow_accepted"?"¡Alguien aceptó tu solicitud!":n.type==="new_comment"?"Alguien comentó en tu reto":n.type==="direct_challenge"?"¡Te desafiaron directamente!":"Nueva solicitud de seguimiento"}
                     </div>
                     <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>
                       {(n.type==="unlock_approved"||n.type==="unlock_rejected"||n.type==="new_comment")&&n.post?.prompt?.slice(0,50)} • {timeAgo(n.created_at)}
@@ -828,6 +948,7 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
 
 function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange, onProfileTap }: { user: User; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
   const [myPosts, setMyPosts] = useState<Post[]>([]);
+  const [postStats, setPostStats] = useState<Record<string,{attempts:number;unlocked:number;pending:number}>>({});
   const [editingPost, setEditingPost] = useState<Post|null>(null);
   const [username, setUsername] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
@@ -841,7 +962,21 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
 
   useEffect(()=>{
     sbFetch(`posts?user_id=eq.${user.id}&select=${POST_SELECT}&order=created_at.desc`)
-      .then(data=>{ if(Array.isArray(data)) setMyPosts(data); });
+      .then(async data=>{
+        if(!Array.isArray(data)) return;
+        setMyPosts(data);
+        if(data.length===0) return;
+        const ids = data.map((p:{id:string})=>p.id).join(",");
+        const [attData, unlData] = await Promise.all([
+          sbFetch(`attempts?post_id=in.(${ids})&select=post_id,count`),
+          sbFetch(`unlocks?post_id=in.(${ids})&select=post_id,status`)
+        ]);
+        const stats: Record<string,{attempts:number;unlocked:number;pending:number}> = {};
+        data.forEach((p:{id:string})=>{ stats[p.id]={attempts:0,unlocked:0,pending:0}; });
+        if(Array.isArray(attData)) attData.forEach((a:{post_id:string;count:number})=>{ if(stats[a.post_id]) stats[a.post_id].attempts+=a.count; });
+        if(Array.isArray(unlData)) unlData.forEach((u:{post_id:string;status:string})=>{ if(stats[u.post_id]) { if(u.status==="approved") stats[u.post_id].unlocked++; else if(u.status==="pending") stats[u.post_id].pending++; } });
+        setPostStats(stats);
+      });
     sbFetch(`profiles?id=eq.${user.id}&select=username,is_private,streak_count`).then(data=>{
       if (Array.isArray(data)&&data.length>0) {
         if (data[0].username) setUsername(data[0].username);
@@ -1004,7 +1139,12 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
                 <div style={{height:80,background:post.image_url?`url(${post.image_url})`:(post.gradient||"var(--surface2)"),backgroundSize:"cover",backgroundPosition:"center",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,filter:post.image_url?"blur(4px)":"none"}}>{!post.image_url&&post.emoji}</div>
                 <div style={{padding:"10px 12px"}}>
                   <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>{post.caption}</div>
-                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>{post.challenge_type==="trivia"?"🧠":"📸"} {post.prompt.slice(0,50)}{post.prompt.length>50?"…":""}</div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:4}}>{post.challenge_type==="trivia"?"🧠":"📸"} {post.prompt.slice(0,50)}{post.prompt.length>50?"…":""}</div>
+                  {postStats[post.id]&&<div style={{display:"flex",gap:10,fontSize:11,marginBottom:8}}>
+                    <span style={{color:"var(--muted)"}}>👁 {postStats[post.id].attempts} intentos</span>
+                    <span style={{color:"var(--accent)"}}>🔓 {postStats[post.id].unlocked}</span>
+                    {postStats[post.id].pending>0&&<span style={{color:"#FFE66D"}}>⏳ {postStats[post.id].pending} pendientes</span>}
+                  </div>}
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>handleShare(post.id)}
                       style={{flex:1,padding:"8px",background:"rgba(232,255,71,.08)",border:"1px solid rgba(232,255,71,.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,color:"var(--accent)",fontFamily:"var(--font-b)"}}>
@@ -1032,6 +1172,7 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
 
 function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, followingIds, onFollowChange, onProfileTap, currentUser }: { posts: Post[]; onOpenChallenge: (p:Post)=>void; likedIds: string[]; onLike: (id:string)=>void; currentUserId: string; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void; currentUser: User }) {
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"recent"|"trending">("recent");
   const [pendingFollows, setPendingFollows] = useState<string[]>([]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
   const [ranking, setRanking] = useState<(Profile&{points:number})[]>([]);
@@ -1097,13 +1238,23 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
       </div>
       <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:tab==="people"||tab==="ranking"?10:16}}>
         {tab==="posts"?(
-          filtered.length===0?(
-            <div style={{textAlign:"center",padding:"60px 20px"}}>
-              <div style={{fontSize:48,marginBottom:12}}>🔍</div>
-              <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>{search?"Sin resultados":"Sin retos públicos aún"}</div>
-              <div style={{color:"var(--muted)",fontSize:14}}>Invitá amigos para que publiquen.</div>
+          <>
+            <div style={{display:"flex",gap:6,marginBottom:8}}>
+              {([["recent","🕐 Recientes"],["trending","🔥 Trending"]] as [string,string][]).map(([v,l])=>(
+                <button key={v} onClick={()=>setSortBy(v as "recent"|"trending")}
+                  style={{padding:"5px 12px",borderRadius:99,border:`1px solid ${sortBy===v?"var(--accent)":"var(--border2)"}`,background:sortBy===v?"rgba(232,255,71,.08)":"none",cursor:"pointer",fontSize:12,fontWeight:600,color:sortBy===v?"var(--accent)":"var(--muted)",fontFamily:"var(--font-b)"}}>
+                  {l}
+                </button>
+              ))}
             </div>
-          ):filtered.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike} onProfileTap={onProfileTap} currentUser={currentUser}/>)
+            {(sortBy==="trending"?[...filtered].sort((a,b)=>(b.likes_count||0)-(a.likes_count||0)):filtered).length===0?(
+              <div style={{textAlign:"center",padding:"60px 20px"}}>
+                <div style={{fontSize:48,marginBottom:12}}>🔍</div>
+                <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>{search?"Sin resultados":"Sin retos públicos aún"}</div>
+                <div style={{color:"var(--muted)",fontSize:14}}>Invitá amigos para que publiquen.</div>
+              </div>
+            ):(sortBy==="trending"?[...filtered].sort((a,b)=>(b.likes_count||0)-(a.likes_count||0)):filtered).map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={onOpenChallenge} likedIds={likedIds} onLike={onLike} onProfileTap={onProfileTap} currentUser={currentUser}/>)}
+          </>
         ):tab==="people"?(
           filteredProfiles.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
@@ -1178,10 +1329,12 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onload = ev => setImagePreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    compressImage(file).then(compressed => {
+      setImageFile(compressed);
+      const reader = new FileReader();
+      reader.onload = ev => setImagePreview(ev.target?.result as string);
+      reader.readAsDataURL(compressed);
+    });
   }
 
   const canPublish = caption.trim() && prompt.trim() && (challengeType==="photo" || answer.trim());

@@ -1,0 +1,13 @@
+{
+  "name": "TeReto",
+  "short_name": "TeReto",
+  "description": "La red social donde el contenido está bloqueado detrás de retos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0E",
+  "theme_color": "#E8FF47",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
