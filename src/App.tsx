@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://aedbqwnsskuznmbywyav.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_XP97uQLTvyBvGvhVTApwDA_V0g1hAmq";
@@ -16,47 +17,35 @@ const POST_SELECT = `${POST_COLS},profile:profiles(id,full_name,username,avatar_
 
 const APP_URL = "https://tereto-web.vercel.app";
 
-// PKCE helpers
-function generateVerifier(): string {
-  const arr = new Uint8Array(32); crypto.getRandomValues(arr);
-  return btoa(String.fromCharCode(...arr)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
-}
-async function generateChallenge(verifier: string): Promise<string> {
-  const data = new TextEncoder().encode(verifier);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
-}
+// Official Supabase SDK client — handles PKCE automatically
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { flowType: "pkce", autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
+});
+
+// Keep sb_access_token in sync for sbFetch compatibility
+supabaseClient.auth.onAuthStateChange((_event, session) => {
+  if (session?.access_token) {
+    localStorage.setItem("sb_access_token", session.access_token);
+  } else {
+    localStorage.removeItem("sb_access_token");
+  }
+});
 
 const supabase = {
   auth: {
     async signInWithGoogle() {
-      const verifier = generateVerifier();
-      const challenge = await generateChallenge(verifier);
-      localStorage.setItem("pkce_verifier", verifier);
-      window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(APP_URL)}&code_challenge=${challenge}&code_challenge_method=S256`;
+      await supabaseClient.auth.signInWithOAuth({ provider: "google", options: { redirectTo: APP_URL } });
     },
-    async signOut() { await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:"POST", headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${getToken()}` } }); localStorage.removeItem("sb_access_token"); localStorage.removeItem("sb_refresh_token"); },
+    async signOut() {
+      await supabaseClient.auth.signOut();
+      localStorage.removeItem("sb_access_token");
+      localStorage.removeItem("sb_refresh_token");
+    },
     async getSession(): Promise<{ user: User; access_token: string }|null> {
-      // PKCE flow: exchange code for token
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      if (code) {
-        const verifier = localStorage.getItem("pkce_verifier");
-        if (verifier) {
-          try {
-            const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=pkce`, { method:"POST", headers:{ apikey:SUPABASE_ANON_KEY, "Content-Type":"application/json" }, body:JSON.stringify({ auth_code:code, code_verifier:verifier }) });
-            if (res.ok) { const d = await res.json(); localStorage.setItem("sb_access_token", d.access_token); localStorage.setItem("sb_refresh_token", d.refresh_token||""); }
-          } catch { /* ignore */ }
-          localStorage.removeItem("pkce_verifier");
-        }
-        window.history.replaceState({}, "", window.location.pathname);
-      }
-      // Implicit flow fallback: access_token in hash
-      const hash = window.location.hash;
-      if (hash.includes("access_token")) { const p = new URLSearchParams(hash.slice(1)); const t = p.get("access_token"); if (t) { localStorage.setItem("sb_access_token", t); localStorage.setItem("sb_refresh_token", p.get("refresh_token")??""); window.history.replaceState({}, "", window.location.pathname); } }
-      const token = localStorage.getItem("sb_access_token");
-      if (!token) return null;
-      try { const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${token}` } }); if (!res.ok) { localStorage.removeItem("sb_access_token"); return null; } return { user: await res.json(), access_token: token }; } catch { return null; }
+      const { data } = await supabaseClient.auth.getSession();
+      if (!data.session) return null;
+      localStorage.setItem("sb_access_token", data.session.access_token);
+      return { user: data.session.user as unknown as User, access_token: data.session.access_token };
     },
   },
 };
