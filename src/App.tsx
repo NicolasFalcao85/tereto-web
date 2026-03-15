@@ -2162,10 +2162,13 @@ export default function App() {
   }
 
   async function handleInstall() {
+    setShowInstallBanner(false);
     if (!installPrompt) return;
-    (installPrompt as BeforeInstallPromptEvent).prompt();
-    const { outcome } = await (installPrompt as BeforeInstallPromptEvent).userChoice;
-    if (outcome === "accepted") { setShowInstallBanner(false); setInstallPrompt(null); }
+    try {
+      await (installPrompt as BeforeInstallPromptEvent).prompt();
+      await (installPrompt as BeforeInstallPromptEvent).userChoice;
+    } catch { /* ignorar */ }
+    setInstallPrompt(null);
   }
 
   function dismissInstall() {
