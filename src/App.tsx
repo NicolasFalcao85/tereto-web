@@ -1033,6 +1033,8 @@ const GRADIENTS = [
 function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }) {
   const [imageFile, setImageFile] = useState<File|null>(null);
   const [imagePreview, setImagePreview] = useState<string|null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [gradient, setGradient] = useState(GRADIENTS[0]);
   const [caption, setCaption] = useState("");
   const [visibility, setVisibility] = useState<"public"|"friends">("public");
@@ -1099,14 +1101,14 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
             </div>
           )}
           <div style={{display:"flex",gap:0,borderTop:"1px solid var(--border)"}}>
-            <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",borderRight:"1px solid var(--border)",fontSize:14,fontWeight:600,color:"var(--accent)"}}>
+            <button onClick={()=>cameraInputRef.current?.click()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",borderRight:"1px solid var(--border)",fontSize:14,fontWeight:600,color:"var(--accent)",background:"none",border:"none",borderRight:"1px solid var(--border)"}}>
               📷 Cámara
-              <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleImageChange}/>
-            </label>
-            <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--muted)"}}>
+            </button>
+            <button onClick={()=>galleryInputRef.current?.click()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--muted)",background:"none",border:"none"}}>
               🖼️ Galería
-              <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageChange}/>
-            </label>
+            </button>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleImageChange}/>
+            <input ref={galleryInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageChange}/>
           </div>
           {!imagePreview&&(
             <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
