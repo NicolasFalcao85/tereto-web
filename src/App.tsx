@@ -1146,7 +1146,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
             </div>
           )}
           <div style={{display:"flex",borderTop:"1px solid var(--border)"}}>
-            <button onClick={()=>setShowCamera(true)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",borderRight:"1px solid var(--border)",fontSize:14,fontWeight:600,color:"var(--accent)",background:"none",border:"none",borderRight:"1px solid var(--border)"}}>
+            <button onClick={()=>setShowCamera(true)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--accent)",background:"none",border:"none",borderRight:"1px solid var(--border)"}}>
               📷 Cámara
             </button>
             <button onClick={()=>galleryInputRef.current?.click()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--muted)",background:"none",border:"none"}}>
