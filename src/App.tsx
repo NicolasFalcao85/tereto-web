@@ -476,7 +476,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
   );
 }
 
-interface PendingUnlock { id: string; photo_url: string; created_at: string; post: Post; challenger: Profile; }
+interface PendingUnlock { id: string; photo_url: string; unlocked_at: string; post: Post; challenger: Profile; }
 
 function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>void }) {
   const [pending, setPending] = useState<PendingUnlock[]>([]);
@@ -497,7 +497,7 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
     const myPostsData = await sbFetch(`posts?user_id=eq.${user.id}&select=id`);
     const myPostIds = Array.isArray(myPostsData) ? myPostsData.map((p:{id:string})=>p.id) : [];
     if (myPostIds.length>0) {
-      const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${myPostIds.join(",")})&select=*,post:posts(${POST_COLS}),challenger:profiles!unlocks_user_id_fkey(*)`);
+      const data = await sbFetch(`unlocks?status=eq.pending&post_id=in.(${myPostIds.join(",")})&select=*,post:posts(${POST_COLS}),challenger:profiles!user_id(*)`);
       if (Array.isArray(data)) { setPending(data); if(data.length>0) setTab("review"); }
     }
     setLoading(false);
@@ -574,7 +574,7 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
                     <Avatar size={32} img={u.challenger?.avatar_url}/>
                     <div style={{flex:1}}>
                       <span style={{fontWeight:600,fontSize:13}}>{u.challenger?.full_name||"Usuario"}</span>
-                      <div style={{fontSize:11,color:"var(--muted)"}}>quiere desbloquear tu reto • {timeAgo(u.created_at)}</div>
+                      <div style={{fontSize:11,color:"var(--muted)"}}>quiere desbloquear tu reto • {timeAgo(u.unlocked_at)}</div>
                     </div>
                   </div>
                   <div style={{padding:"10px 14px",fontSize:13,color:"var(--muted)",borderBottom:"1px solid var(--border)"}}>
