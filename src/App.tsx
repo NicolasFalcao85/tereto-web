@@ -2032,6 +2032,7 @@ export default function App() {
   const [duelContext, setDuelContext] = useState<{profile: Profile; postId: string}|null>(null);
   const [installPrompt, setInstallPrompt] = useState<Event|null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [appInstalled, setAppInstalled] = useState(false);
   const prevPendingCount = useRef(-1);
   const refCode = useRef<string|null>(new URLSearchParams(window.location.search).get("ref"));
 
@@ -2169,9 +2170,9 @@ export default function App() {
     if (!installPrompt) return;
     try {
       await (installPrompt as BeforeInstallPromptEvent).prompt();
-      await (installPrompt as BeforeInstallPromptEvent).userChoice;
+      const { outcome } = await (installPrompt as BeforeInstallPromptEvent).userChoice;
+      if (outcome === "accepted") { setAppInstalled(true); setInstallPrompt(null); }
     } catch { /* ignorar */ }
-    setInstallPrompt(null);
   }
 
   function dismissInstall() {
@@ -2235,7 +2236,7 @@ export default function App() {
           {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} currentUser={user}/>}
           {activeNav==="create"&&<CreatePage user={user} duelTarget={duelContext?.profile??null} onClearDuel={()=>setDuelContext(null)} onPublished={()=>{ loadPosts(); setActiveNav("feed"); setDuelContext(null); }}/>}
           {activeNav==="notifs"&&<NotificationsPage user={user} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }} onOpenChallenge={p=>{ setChallengePost(p); setActiveNav("feed"); }}/>}
-          {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} onInstall={installPrompt?handleInstall:undefined}/>}
+          {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} onInstall={installPrompt&&!appInstalled?handleInstall:undefined}/>}
           {showInstallBanner&&(
             <div onClick={dismissInstall} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.7)",backdropFilter:"blur(4px)",zIndex:55}}>
               <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"50%",left:12,right:12,transform:"translateY(-50%)",background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:24,padding:"32px 20px",textAlign:"center",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both"}}>
