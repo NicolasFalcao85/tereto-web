@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeReto — Promo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0A0A0E; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:'Inter',sans-serif; }
+
+  .card {
+    width: 1080px;
+    height: 1080px;
+    background: #0A0A0E;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+
+  /* Fondo con gradiente radial */
+  .card::before {
+    content:'';
+    position:absolute;
+    top:-200px; left:50%; transform:translateX(-50%);
+    width:900px; height:900px;
+    background: radial-gradient(ellipse at center, rgba(232,255,71,.13) 0%, transparent 65%);
+    pointer-events:none;
+  }
+  .card::after {
+    content:'';
+    position:absolute;
+    bottom:-300px; right:-200px;
+    width:700px; height:700px;
+    background: radial-gradient(ellipse at center, rgba(78,205,196,.07) 0%, transparent 65%);
+    pointer-events:none;
+  }
+
+  /* Grid de posts al fondo */
+  .posts-grid {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 3px;
+    opacity: 0.18;
+    transform: rotate(-5deg) scale(1.15);
+  }
+  .post-tile {
+    border-radius: 8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 48px;
+    filter: blur(2px);
+  }
+
+  /* Contenido central */
+  .content {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0 80px;
+  }
+
+  .logo {
+    font-size: 28px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -1px;
+    margin-bottom: 48px;
+  }
+  .logo span { color: #E8FF47; }
+
+  .lock-icon {
+    width: 110px;
+    height: 110px;
+    border-radius: 32px;
+    background: rgba(232,255,71,.1);
+    border: 2px solid rgba(232,255,71,.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 56px;
+    margin-bottom: 40px;
+    box-shadow: 0 0 60px rgba(232,255,71,.15);
+  }
+
+  .headline {
+    font-size: 72px;
+    font-weight: 900;
+    line-height: 1.0;
+    color: #F2F2F8;
+    margin-bottom: 24px;
+    letter-spacing: -2px;
+  }
+  .headline .accent { color: #E8FF47; }
+
+  .sub {
+    font-size: 26px;
+    font-weight: 500;
+    color: rgba(242,242,248,.5);
+    line-height: 1.5;
+    margin-bottom: 56px;
+    max-width: 700px;
+  }
+
+  /* Pills de features */
+  .pills {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 60px;
+  }
+  .pill {
+    padding: 10px 22px;
+    border-radius: 99px;
+    border: 1.5px solid rgba(242,242,248,.12);
+    background: rgba(242,242,248,.05);
+    font-size: 18px;
+    font-weight: 600;
+    color: rgba(242,242,248,.7);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* CTA */
+  .cta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 40px;
+    background: #E8FF47;
+    border-radius: 20px;
+    font-size: 24px;
+    font-weight: 900;
+    color: #0A0A0E;
+    letter-spacing: -.5px;
+    box-shadow: 0 8px 40px rgba(232,255,71,.3);
+  }
+
+  /* URL abajo */
+  .url {
+    position: absolute;
+    bottom: 52px;
+    font-size: 20px;
+    font-weight: 600;
+    color: rgba(242,242,248,.25);
+    letter-spacing: 1px;
+    z-index: 10;
+  }
+
+  /* Línea decorativa */
+  .deco-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(232,255,71,.2), transparent);
+    bottom: 110px;
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- Grid de posts de fondo -->
+  <div class="posts-grid">
+    <div class="post-tile" style="background:linear-gradient(135deg,#667eea,#764ba2)">🔒</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#f093fb,#f5576c)">🧠</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#4facfe,#00f2fe)">📸</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#43e97b,#38f9d7)">🔒</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#fa709a,#fee140)">⚡</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#a18cd1,#fbc2eb)">🔒</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#ffecd2,#fcb69f)">🧩</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#a1c4fd,#c2e9fb)">📷</div>
+    <div class="post-tile" style="background:linear-gradient(135deg,#fd7043,#e53935)">🔒</div>
+  </div>
+
+  <div class="content">
+    <div class="logo">Te<span>Reto</span></div>
+
+    <div class="lock-icon">🔒</div>
+
+    <div class="headline">
+      El contenido<br>se <span class="accent">desbloquea</span><br>superando retos
+    </div>
+
+    <div class="sub">
+      Trivia, fotos y desafíos 1v1.<br>¿Podés superar el reto para ver qué hay adentro?
+    </div>
+
+    <div class="pills">
+      <div class="pill"><span>🧠</span> Trivia</div>
+      <div class="pill"><span>📸</span> Retos de foto</div>
+      <div class="pill"><span>⚔️</span> Duelos 1v1</div>
+      <div class="pill"><span>🏆</span> Ranking</div>
+    </div>
+
+    <div class="cta">
+      <span>⚡</span>
+      Jugá gratis en tereto-web.vercel.app
+    </div>
+  </div>
+
+  <div class="deco-line"></div>
+  <div class="url">tereto-web.vercel.app</div>
+
+</div>
+</body>
+</html>
