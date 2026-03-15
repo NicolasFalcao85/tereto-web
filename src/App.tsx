@@ -2232,15 +2232,18 @@ export default function App() {
           {activeNav==="notifs"&&<NotificationsPage user={user} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }} onOpenChallenge={p=>{ setChallengePost(p); setActiveNav("feed"); }}/>}
           {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
           {showInstallBanner&&(
-            <div style={{position:"fixed",bottom:74,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:480,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,zIndex:19,boxShadow:"0 4px 24px rgba(0,0,0,.4)",animation:"fadeUp .3s ease both"}}>
-              <div style={{fontSize:28,flexShrink:0}}>⚡</div>
-              <div style={{flex:1}}>
-                <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800}}>Instalá TeReto</div>
-                <div style={{fontSize:12,color:"var(--muted)",marginTop:1}}>Accedé más rápido desde tu pantalla de inicio</div>
+            <>
+              <div onClick={dismissInstall} style={{position:"fixed",inset:0,zIndex:18}}/>
+              <div style={{position:"fixed",bottom:74,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:480,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,zIndex:19,boxShadow:"0 4px 24px rgba(0,0,0,.4)",animation:"fadeUp .3s ease both"}}>
+                <div style={{fontSize:28,flexShrink:0}}>⚡</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800}}>Instalá TeReto</div>
+                  <div style={{fontSize:12,color:"var(--muted)",marginTop:1}}>Accedé más rápido desde tu pantalla de inicio</div>
+                </div>
+                <button onClick={handleInstall} style={{padding:"9px 16px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#0A0A0E",flexShrink:0}}>Instalar</button>
+                <button onClick={dismissInstall} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",fontSize:16,color:"var(--muted)",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
               </div>
-              <button onClick={handleInstall} style={{padding:"7px 14px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#0A0A0E",flexShrink:0}}>Instalar</button>
-              <button onClick={dismissInstall} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"var(--muted)",padding:4,flexShrink:0}}>✕</button>
-            </div>
+            </>
           )}
           <BottomNav active={activeNav} onChange={id=>{ setViewingProfileId(null); setDuelContext(null); setActiveNav(id); }} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
