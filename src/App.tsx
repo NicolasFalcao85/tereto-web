@@ -4,14 +4,14 @@ const SUPABASE_URL = "https://aedbqwnsskuznmbywyav.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_XP97uQLTvyBvGvhVTApwDA_V0g1hAmq";
 
 interface User { id: string; email: string; user_metadata: { full_name?: string; avatar_url?: string }; }
-interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; is_private?: boolean; }
-interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; profile?: Profile; unlocked?: boolean; likes_count?: number; }
+interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; is_private?: boolean; streak_count?: number; }
+interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; expires_at?: string|null; profile?: Profile; unlocked?: boolean; likes_count?: number; }
 interface Follow { id: string; follower_id: string; following_id: string; status: "pending"|"accepted"|"rejected"; created_at: string; profile?: Profile; }
 
 function getToken() { return localStorage.getItem("sb_access_token") ?? ""; }
 
 // Never include correct_answer — validated server-side via validate_trivia_answer RPC
-const POST_COLS = "id,user_id,emoji,caption,gradient,image_url,challenge_type,prompt,hint,max_attempts,created_at,visibility,likes_count";
+const POST_COLS = "id,user_id,emoji,caption,gradient,image_url,challenge_type,prompt,hint,max_attempts,created_at,visibility,likes_count,expires_at";
 const POST_SELECT = `${POST_COLS},profile:profiles(id,full_name,username,avatar_url,is_private)`;
 
 const APP_URL = "https://tereto-web.vercel.app";
@@ -139,6 +139,7 @@ function ToastProvider() {
 
 function fmt(n: number) { return n>=1000?(n/1000).toFixed(1)+"k":String(n); }
 function timeAgo(d: string) { const m=Math.floor((Date.now()-new Date(d).getTime())/60000); if(m<60) return `hace ${m}m`; const h=Math.floor(m/60); if(h<24) return `hace ${h}h`; return `hace ${Math.floor(h/24)}d`; }
+function timeUntil(d: string) { const ms = new Date(d).getTime() - Date.now(); if (ms<=0) return "Expirado"; const h = Math.floor(ms/3600000); if (h<24) return `${h}h restantes`; return `${Math.floor(h/24)}d restantes`; }
 function Spinner({ size=28 }: { size?: number }) { return <div style={{width:size,height:size,border:"3px solid var(--border2)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>; }
 function Avatar({ size=36, img, emoji="👤" }: { size?: number; img?: string|null; emoji?: string }) {
   return <div style={{width:size,height:size,borderRadius:"50%",background:"var(--surface2)",border:"1.5px solid var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.42,flexShrink:0,overflow:"hidden"}}>{img?<img src={img} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:emoji}</div>;
@@ -274,7 +275,13 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
   const [showComments, setShowComments] = useState(false);
   function handleShare() {
     const url = `${window.location.origin}?post=${post.id}`;
-    navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+    const name = post.profile?.full_name||post.profile?.username||"Alguien";
+    const text = `${name} te desafió en TeReto 👀 ¿Podés superar este reto?`;
+    if (navigator.share) {
+      navigator.share({ title:"TeReto", text, url }).catch(()=>{});
+    } else {
+      navigator.clipboard.writeText(`${text}\n${url}`).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+    }
   }
   return (
     <article style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:20,overflow:"hidden",animation:`fadeUp .4s cubic-bezier(.22,1,.36,1) ${index*55}ms both`}}>
@@ -287,6 +294,11 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
           </div>
         </div>
       </div>
+      {post.expires_at&&new Date(post.expires_at)>new Date()&&new Date(post.expires_at).getTime()-Date.now()<86400000&&(
+        <div style={{margin:"0 12px 8px",padding:"6px 12px",background:"rgba(255,107,107,.08)",border:"1px solid rgba(255,107,107,.3)",borderRadius:8,fontSize:12,color:"#FF6B6B",fontWeight:700}}>
+          ⏳ {timeUntil(post.expires_at)}
+        </div>
+      )}
       <div style={{padding:"0 12px"}}>
         {post.unlocked?<UnlockedContent post={post}/>:<LockedOverlay post={post} onTap={()=>onOpenChallenge(post)}/>}
       </div>
@@ -793,14 +805,16 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
   const [savingUsername, setSavingUsername] = useState(false);
   const [copied, setCopied] = useState<string|null>(null);
   const [followRequests, setFollowRequests] = useState<Follow[]>([]);
+  const [streak, setStreak] = useState(0);
 
   useEffect(()=>{
     sbFetch(`posts?user_id=eq.${user.id}&select=${POST_SELECT}&order=created_at.desc`)
       .then(data=>{ if(Array.isArray(data)) setMyPosts(data); });
-    sbFetch(`profiles?id=eq.${user.id}&select=username,is_private`).then(data=>{
+    sbFetch(`profiles?id=eq.${user.id}&select=username,is_private,streak_count`).then(data=>{
       if (Array.isArray(data)&&data.length>0) {
         if (data[0].username) setUsername(data[0].username);
         setIsPrivate(!!data[0].is_private);
+        if (data[0].streak_count) setStreak(data[0].streak_count);
       }
     });
     loadFollowRequests();
@@ -850,7 +864,13 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
 
   function handleShare(postId: string) {
     const url = `${window.location.origin}?post=${postId}`;
-    navigator.clipboard.writeText(url).then(()=>{ setCopied(postId); setTimeout(()=>setCopied(null),2000); });
+    const name = user.user_metadata?.full_name||user.email?.split("@")[0]||"Alguien";
+    const text = `${name} te desafió en TeReto 👀 ¿Podés superar este reto?`;
+    if (navigator.share) {
+      navigator.share({ title:"TeReto", text, url }).catch(()=>{});
+    } else {
+      navigator.clipboard.writeText(`${text}\n${url}`).then(()=>{ setCopied(postId); setTimeout(()=>setCopied(null),2000); });
+    }
   }
 
   return (
@@ -930,7 +950,7 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
 
       {/* Stats */}
       <div style={{margin:"12px 16px 0",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        {([["🔓","Desbloqueados",unlockedIds.length],["📸","Mis posts",myPosts.length],["⚡","Puntos",unlockedIds.length*150],["🏆","Nivel",Math.floor(unlockedIds.length/3)+1]] as [string,string,number][]).map(([e,l,v])=>(
+        {([["🔓","Desbloqueados",unlockedIds.length],["📸","Mis posts",myPosts.length],["🔥","Racha",streak],["🏆","Nivel",Math.floor(unlockedIds.length/3)+1]] as [string,string,number][]).map(([e,l,v])=>(
           <div key={l} style={{padding:"14px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,textAlign:"center"}}>
             <div style={{fontSize:22,marginBottom:4}}>{e}</div>
             <div style={{fontFamily:"var(--font-d)",fontSize:20,fontWeight:800}}>{v}</div>
@@ -1121,6 +1141,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
   const [hint, setHint] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
+  const [expiresIn, setExpiresIn] = useState<number|null>(null); // horas
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1144,7 +1165,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
       }
       const data = await sbFetch("posts", {
         method: "POST",
-        body: JSON.stringify({ user_id:user.id, emoji:"🖼️", caption, gradient, image_url, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3, visibility }),
+        body: JSON.stringify({ user_id:user.id, emoji:"🖼️", caption, gradient, image_url, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3, visibility, expires_at: expiresIn ? new Date(Date.now()+expiresIn*3600000).toISOString() : null }),
         headers: { Prefer:"return=representation" }
       });
       if (data && !data.error && !data.message) { showToast("✅ ¡Reto publicado!"); onPublished(); }
@@ -1242,6 +1263,19 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
                 <div style={{fontSize:20,marginBottom:4}}>{e}</div>
                 <div style={{fontSize:13,fontWeight:600,color:visibility===v?"var(--accent)":"var(--text)"}}>{l}</div>
                 <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{d}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Expiración */}
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"16px"}}>
+          <div style={{fontSize:12,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>TIEMPO LÍMITE <span style={{color:"var(--muted)",fontWeight:400}}>(opcional)</span></div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {([[null,"Sin límite"],[24,"24 horas"],[48,"48 horas"],[168,"7 días"]] as [number|null,string][]).map(([v,l])=>(
+              <button key={String(v)} onClick={()=>setExpiresIn(v)}
+                style={{padding:"8px 14px",borderRadius:99,border:`1.5px solid ${expiresIn===v?"var(--accent)":"var(--border2)"}`,background:expiresIn===v?"rgba(232,255,71,.08)":"var(--surface2)",cursor:"pointer",fontSize:13,fontWeight:600,color:expiresIn===v?"var(--accent)":"var(--muted)",fontFamily:"var(--font-b)"}}>
+                {l}
               </button>
             ))}
           </div>
@@ -1390,6 +1424,37 @@ function PublicProfilePage({ profileId, currentUser, followingIds, onFollowChang
   );
 }
 
+function ActivityFeed({ followingIds }: { followingIds: string[] }) {
+  const [activities, setActivities] = useState<{id:string;user_id:string;post_id:string;created_at:string;profile:{full_name:string|null;avatar_url:string|null};post:{emoji:string;caption:string;gradient:string}}[]>([]);
+
+  useEffect(()=>{
+    if (followingIds.length===0) return;
+    sbFetch(`unlocks?user_id=in.(${followingIds.join(",")})&status=eq.approved&select=id,user_id,post_id,created_at,profile:profiles!user_id(full_name,avatar_url),post:posts(emoji,caption,gradient)&order=created_at.desc&limit=8`)
+      .then(data=>{ if(Array.isArray(data)) setActivities(data); });
+  },[followingIds.join(",")]);
+
+  if (activities.length===0) return null;
+
+  return (
+    <div style={{margin:"0 0 8px",padding:"12px 16px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16}}>
+      <div style={{fontSize:11,color:"var(--muted)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>ACTIVIDAD RECIENTE</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {activities.map(a=>(
+          <div key={a.id} style={{display:"flex",alignItems:"center",gap:8}}>
+            <Avatar size={28} img={a.profile?.avatar_url}/>
+            <div style={{flex:1,fontSize:12,lineHeight:1.4}}>
+              <span style={{fontWeight:700}}>{a.profile?.full_name||"Usuario"}</span>
+              <span style={{color:"var(--muted)"}}> desbloqueó </span>
+              <span>{a.post?.emoji} {a.post?.caption?.slice(0,25)}{(a.post?.caption?.length||0)>25?"…":""}</span>
+            </div>
+            <span style={{fontSize:11,color:"var(--muted)",flexShrink:0}}>{timeAgo(a.created_at)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User|null>(null);
   const [loading, setLoading] = useState(true);
@@ -1523,7 +1588,7 @@ export default function App() {
   }
 
   const postsWithUnlocked = posts.map(p=>({...p, unlocked:unlockedIds.includes(p.id)}));
-  const feedPosts = postsWithUnlocked.filter(canSeePost);
+  const feedPosts = postsWithUnlocked.filter(p => canSeePost(p) && (!p.expires_at || new Date(p.expires_at) > new Date()));
 
   if (loading) return (<><GlobalStyles/><div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><Spinner/><div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800}}>Te<span style={{color:"var(--accent)"}}>Reto</span></div></div></>);
 
@@ -1543,6 +1608,7 @@ export default function App() {
               </div>
               {postsLoading?<div style={{display:"flex",justifyContent:"center",padding:"60px 0"}}><Spinner/></div>:(
                 <div style={{padding:"12px 12px 0",display:"flex",flexDirection:"column",gap:16}}>
+                  {followingIds.length>0&&<ActivityFeed followingIds={followingIds}/>}
                   {feedPosts.map((post,i)=><FeedCard key={post.id} post={post} index={i} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} onProfileTap={setViewingProfileId} currentUser={user}/>)}
                   {feedPosts.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>No hay posts todavía. ¡Seguí a alguien o publicá tu primer reto!</div>}
                 </div>
