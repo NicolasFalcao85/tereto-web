@@ -1083,25 +1083,31 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
 
         {/* Foto del contenido */}
         <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,overflow:"hidden"}}>
-          <label style={{display:"block",cursor:"pointer"}}>
-            {imagePreview ? (
-              <div style={{position:"relative"}}>
-                <img src={imagePreview} style={{width:"100%",height:240,objectFit:"cover",display:"block",filter:"blur(16px)",transform:"scale(1.05)"}} alt="preview"/>
-                <div style={{position:"absolute",inset:0,background:"rgba(10,10,14,.5)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
-                  <div style={{fontSize:28}}>🔒</div>
-                  <div style={{fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#fff"}}>Así se verá blureada</div>
-                  <div style={{fontSize:12,color:"var(--muted)"}}>Tocá para cambiar la foto</div>
-                </div>
+          {imagePreview ? (
+            <div style={{position:"relative"}}>
+              <img src={imagePreview} style={{width:"100%",height:240,objectFit:"cover",display:"block",filter:"blur(16px)",transform:"scale(1.05)"}} alt="preview"/>
+              <div style={{position:"absolute",inset:0,background:"rgba(10,10,14,.5)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
+                <div style={{fontSize:28}}>🔒</div>
+                <div style={{fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#fff"}}>Así se verá blureada</div>
               </div>
-            ) : (
-              <div style={{height:200,background:gradient,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10}}>
-                <div style={{fontSize:36}}>📷</div>
-                <div style={{fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:"#fff"}}>Subí tu foto</div>
-                <div style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Se va a mostrar blureada hasta que superen el reto</div>
-              </div>
-            )}
-            <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageChange}/>
-          </label>
+            </div>
+          ) : (
+            <div style={{height:160,background:gradient,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6}}>
+              <div style={{fontSize:36}}>📷</div>
+              <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"#fff"}}>Subí tu foto</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Se verá blureada hasta que superen el reto</div>
+            </div>
+          )}
+          <div style={{display:"flex",gap:0,borderTop:"1px solid var(--border)"}}>
+            <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",borderRight:"1px solid var(--border)",fontSize:14,fontWeight:600,color:"var(--accent)"}}>
+              📷 Cámara
+              <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleImageChange}/>
+            </label>
+            <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--muted)"}}>
+              🖼️ Galería
+              <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageChange}/>
+            </label>
+          </div>
           {!imagePreview&&(
             <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
               <div style={{fontSize:11,color:"var(--muted)",marginBottom:8}}>O elegí un color de fondo:</div>
