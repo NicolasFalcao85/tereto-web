@@ -1529,7 +1529,7 @@ function CreatePage({ user, onPublished, duelTarget, onClearDuel }: { user: User
   async function loadFollowingProfiles() {
     if (followingProfiles.length > 0 || loadingFollowing) return;
     setLoadingFollowing(true);
-    const data = await sbFetch(`follows?follower_id=eq.${user.id}&status=eq.accepted&select=profile:profiles(id,full_name,username,avatar_url)`);
+    const data = await sbFetch(`follows?follower_id=eq.${user.id}&status=eq.accepted&select=profile:profiles!following_id(id,full_name,username,avatar_url)`);
     if (Array.isArray(data)) setFollowingProfiles(data.map((f: {profile: Profile})=>f.profile).filter(Boolean));
     setLoadingFollowing(false);
   }
