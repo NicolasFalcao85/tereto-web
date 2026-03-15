@@ -1102,7 +1102,7 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
   );
 }
 
-function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange, onProfileTap }: { user: User; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
+function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange, onProfileTap, onInstall }: { user: User; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void; onInstall?: ()=>void }) {
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [postStats, setPostStats] = useState<Record<string,{attempts:number;unlocked:number;pending:number}>>({});
   const [editingPost, setEditingPost] = useState<Post|null>(null);
@@ -1203,7 +1203,10 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
     <div style={{maxWidth:520,margin:"0 auto",padding:"0 0 80px",animation:"fadeUp .35s ease both"}}>
       <div style={{padding:"52px 20px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <h2 style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800}}>Mi perfil</h2>
-        <button onClick={onLogout} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"var(--muted)",fontSize:13,fontFamily:"var(--font-b)"}}>Salir</button>
+        <div style={{display:"flex",gap:8}}>
+          {onInstall&&<button onClick={onInstall} style={{background:"var(--accent)",border:"none",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"#0A0A0E",fontSize:13,fontWeight:800,fontFamily:"var(--font-d)"}}>⚡ Instalar</button>}
+          <button onClick={onLogout} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"var(--muted)",fontSize:13,fontFamily:"var(--font-b)"}}>Salir</button>
+        </div>
       </div>
 
       {/* Info */}
@@ -2033,7 +2036,7 @@ export default function App() {
   const refCode = useRef<string|null>(new URLSearchParams(window.location.search).get("ref"));
 
   useEffect(()=>{
-    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); if(!localStorage.getItem("tereto_install_dismissed")) setShowInstallBanner(true); };
+    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); setShowInstallBanner(true); };
     window.addEventListener("beforeinstallprompt", handler);
     return ()=>window.removeEventListener("beforeinstallprompt", handler);
   },[]);
@@ -2172,7 +2175,6 @@ export default function App() {
   }
 
   function dismissInstall() {
-    localStorage.setItem("tereto_install_dismissed","1");
     setShowInstallBanner(false);
   }
 
@@ -2233,7 +2235,7 @@ export default function App() {
           {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} currentUser={user}/>}
           {activeNav==="create"&&<CreatePage user={user} duelTarget={duelContext?.profile??null} onClearDuel={()=>setDuelContext(null)} onPublished={()=>{ loadPosts(); setActiveNav("feed"); setDuelContext(null); }}/>}
           {activeNav==="notifs"&&<NotificationsPage user={user} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }} onOpenChallenge={p=>{ setChallengePost(p); setActiveNav("feed"); }}/>}
-          {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
+          {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} onInstall={installPrompt?handleInstall:undefined}/>}
           {showInstallBanner&&(
             <div onClick={dismissInstall} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.7)",backdropFilter:"blur(4px)",zIndex:55}}>
               <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"50%",left:12,right:12,transform:"translateY(-50%)",background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:24,padding:"32px 20px",textAlign:"center",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both"}}>
