@@ -688,7 +688,7 @@ interface PendingFollowReq { id: string; follower_id: string; created_at: string
 function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; onReviewed: ()=>void; onOpenChallenge?: (post: Post)=>void }) {
   const [pending, setPending] = useState<PendingUnlock[]>([]);
   const [pendingFollowReqs, setPendingFollowReqs] = useState<PendingFollowReq[]>([]);
-  const [myNotifs, setMyNotifs] = useState<{id:string;type:string;post:Post;unlock?:{reject_reason:string|null};duel?:{id:string;challenger:{id:string;full_name:string|null;avatar_url:string|null}}|null;created_at:string;read:boolean}[]>([]);
+  const [myNotifs, setMyNotifs] = useState<{id:string;type:string;post:Post;unlock?:{reject_reason:string|null};duel?:{id:string;challenger:{id:string;full_name:string|null;avatar_url:string|null}}|null;from_user?:{id:string;full_name:string|null;username:string|null;avatar_url:string|null}|null;created_at:string;read:boolean}[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"mine"|"review">("mine");
   const [rejectingId, setRejectingId] = useState<string|null>(null);
@@ -700,7 +700,7 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
     setLoading(true);
     try {
       // My notifications (approved/rejected)
-      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(id,user_id,prompt,emoji,challenge_type,options,hint,max_attempts,gradient,caption,image_url,visibility,profile:profiles(id,full_name,username,avatar_url)),unlock:unlocks(reject_reason),duel:duels(id,challenger:profiles!challenger_id(id,full_name,avatar_url))&order=created_at.desc&limit=20`);
+      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(id,user_id,prompt,emoji,challenge_type,options,hint,max_attempts,gradient,caption,image_url,visibility,profile:profiles(id,full_name,username,avatar_url)),unlock:unlocks(reject_reason),duel:duels(id,challenger:profiles!challenger_id(id,full_name,avatar_url)),from_user:profiles!from_user_id(id,full_name,username,avatar_url)&order=created_at.desc&limit=20`);
       if (Array.isArray(notifData)) setMyNotifs(notifData);
       // Mark as read
       await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false`, { method:"PATCH", body:JSON.stringify({read:true}), headers:{Prefer:"return=minimal"} });
@@ -721,7 +721,7 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
   async function handleFollowReq(followId: string, accept: boolean, followerId: string) {
     await sbFetch(`follows?id=eq.${followId}`, { method:"PATCH", body:JSON.stringify({status:accept?"accepted":"rejected"}), headers:{Prefer:"return=minimal"} });
     if (accept) {
-      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:followerId, type:"follow_accepted" }), headers:{Prefer:"return=minimal"} });
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:followerId, type:"follow_accepted", from_user_id:user.id }), headers:{Prefer:"return=minimal"} });
       showToast("✅ Solicitud aceptada");
     } else {
       showToast("Solicitud rechazada");
@@ -808,7 +808,15 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
                   </div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:600,color:n.type==="unlock_approved"||n.type==="follow_accepted"?"var(--accent)":n.type==="unlock_rejected"?"#FF6B6B":n.type==="duel_request"?"#FFB347":"var(--text)"}}>
-                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":n.type==="unlock_rejected"?"Tu foto fue rechazada":n.type==="follow_accepted"?"¡Alguien aceptó tu solicitud!":n.type==="new_comment"?"Alguien comentó en tu reto":n.type==="duel_request"?`⚔️ ${n.duel?.challenger?.full_name||"Alguien"} te desafió 1v1`:"Nueva solicitud de seguimiento"}
+                      {(()=>{
+                        const nombre = n.from_user?.full_name||n.from_user?.username||"Alguien";
+                        if(n.type==="unlock_approved") return "¡Tu foto fue aprobada!";
+                        if(n.type==="unlock_rejected") return "Tu foto fue rechazada";
+                        if(n.type==="follow_accepted") return `¡${nombre} aceptó tu solicitud!`;
+                        if(n.type==="new_comment") return "Alguien comentó en tu reto";
+                        if(n.type==="duel_request") return `⚔️ ${n.duel?.challenger?.full_name||nombre} te desafió 1v1`;
+                        return "Nueva solicitud de seguimiento";
+                      })()}
                     </div>
                     <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>
                       {(n.type==="unlock_approved"||n.type==="unlock_rejected"||n.type==="new_comment")&&n.post?.prompt?.slice(0,50)}
@@ -1152,7 +1160,7 @@ function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds,
   async function handleFollowRequest(followId: string, accept: boolean, followerId: string) {
     await sbFetch(`follows?id=eq.${followId}`, { method:"PATCH", body:JSON.stringify({status:accept?"accepted":"rejected"}), headers:{Prefer:"return=minimal"} });
     if (accept) {
-      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:followerId, type:"follow_accepted" }), headers:{Prefer:"return=minimal"} });
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:followerId, type:"follow_accepted", from_user_id:userId }), headers:{Prefer:"return=minimal"} });
       onFollowChange();
       showToast("✅ Solicitud aceptada");
     } else {
@@ -1374,7 +1382,7 @@ function ExplorePage({ posts, onOpenChallenge, likedIds, onLike, currentUserId, 
       showToast("Solicitud cancelada");
     } else {
       await sbFetch("follows", { method:"POST", body:JSON.stringify({ follower_id:currentUserId, following_id:profileId, status:"pending" }), headers:{ Prefer:"return=minimal" } });
-      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:profileId, type:"follow_request" }), headers:{ Prefer:"return=minimal" } });
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:profileId, type:"follow_request", from_user_id:currentUserId }), headers:{ Prefer:"return=minimal" } });
       setPendingFollows(prev=>[...prev,profileId]);
       onFollowChange(); showToast("✅ Solicitud enviada");
     }
@@ -1901,7 +1909,7 @@ function PublicProfilePage({ profileId, currentUser, followingIds, onFollowChang
       setPendingFollow(false); showToast("Solicitud cancelada");
     } else {
       await sbFetch("follows", { method:"POST", body:JSON.stringify({ follower_id:currentUser.id, following_id:profileId, status:"pending" }), headers:{ Prefer:"return=minimal" } });
-      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:profileId, type:"follow_request" }), headers:{ Prefer:"return=minimal" } });
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:profileId, type:"follow_request", from_user_id:currentUser.id }), headers:{ Prefer:"return=minimal" } });
       setPendingFollow(true);
       onFollowChange(); showToast("✅ Solicitud enviada");
     }
