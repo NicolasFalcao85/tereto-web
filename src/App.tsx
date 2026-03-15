@@ -553,7 +553,19 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
             <button onClick={onClose} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,width:28,height:28,cursor:"pointer",color:"var(--muted)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
           </div>
         </div>
-        {isOwn?(
+        {post.unlocked?(
+          <div>
+            <UnlockedContent post={post}/>
+            <div style={{marginTop:14,padding:"14px 16px",background:"rgba(232,255,71,.04)",border:"1px solid rgba(232,255,71,.15)",borderRadius:14}}>
+              <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:6}}>EL RETO ERA</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:18}}>{post.challenge_type==="trivia"?"🧠":"📸"}</span>
+                <span style={{fontSize:14,color:"var(--muted)",lineHeight:1.4}}>{post.prompt}</span>
+              </div>
+            </div>
+            <button onClick={onClose} style={{marginTop:16,width:"100%",padding:"13px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:12,cursor:"pointer",color:"var(--text)",fontFamily:"var(--font-b)",fontSize:14}}>Cerrar</button>
+          </div>
+        ) : isOwn?(
           <div style={{textAlign:"center",padding:"20px 0"}}>
             <div style={{fontSize:52,marginBottom:12}}>🙈</div>
             <div style={{fontFamily:"var(--font-d)",fontSize:20,fontWeight:800,marginBottom:8}}>Este es tu reto</div>
@@ -685,7 +697,7 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
     setLoading(true);
     try {
       // My notifications (approved/rejected)
-      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(id,user_id,prompt,emoji,challenge_type,options,hint,max_attempts,gradient,caption,profile:profiles(id,full_name,username,avatar_url)),unlock:unlocks(reject_reason),duel:duels(id,challenger:profiles!challenger_id(id,full_name,avatar_url))&order=created_at.desc&limit=20`);
+      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(id,user_id,prompt,emoji,challenge_type,options,hint,max_attempts,gradient,caption,image_url,visibility,profile:profiles(id,full_name,username,avatar_url)),unlock:unlocks(reject_reason),duel:duels(id,challenger:profiles!challenger_id(id,full_name,avatar_url))&order=created_at.desc&limit=20`);
       if (Array.isArray(notifData)) setMyNotifs(notifData);
       // Mark as read
       await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false`, { method:"PATCH", body:JSON.stringify({read:true}), headers:{Prefer:"return=minimal"} });
@@ -761,6 +773,18 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
                       <div style={{marginTop:6,padding:"6px 10px",background:"rgba(255,107,107,.06)",border:"1px solid rgba(255,107,107,.2)",borderRadius:8,fontSize:12,color:"#FF6B6B",fontStyle:"italic"}}>
                         "{n.unlock.reject_reason}"
                       </div>
+                    )}
+                    {n.type==="unlock_approved"&&n.post&&onOpenChallenge&&(
+                      <button onClick={()=>onOpenChallenge({...(n.post as Post), unlocked:true})}
+                        style={{marginTop:8,padding:"7px 14px",background:"rgba(232,255,71,.08)",border:"1.5px solid var(--accent)",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:12,fontWeight:800,color:"var(--accent)"}}>
+                        🔓 Ver contenido →
+                      </button>
+                    )}
+                    {n.type==="unlock_rejected"&&n.post&&onOpenChallenge&&(
+                      <button onClick={()=>onOpenChallenge(n.post as Post)}
+                        style={{marginTop:8,padding:"7px 14px",background:"rgba(255,107,107,.08)",border:"1.5px solid #FF6B6B",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:12,fontWeight:800,color:"#FF6B6B"}}>
+                        🔁 Intentar de nuevo →
+                      </button>
                     )}
                     {n.type==="duel_request"&&n.post&&onOpenChallenge&&(
                       <button onClick={()=>onOpenChallenge(n.post as Post)}
