@@ -465,7 +465,7 @@ function NotificationsPage({ user, posts, onReviewed }: { user: User; posts: Pos
       <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(10,10,14,.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid var(--border)",padding:"16px 20px"}}>
         <h2 style={{fontFamily:"var(--font-d)",fontSize:22,fontWeight:800,marginBottom:12}}>Notificaciones 🔔</h2>
         <div style={{display:"flex",gap:8}}>
-          {([["mine","Mis notifs"],["review",`Revisar${pending.length>0?` (${pending.length})`:""}`]] as [string,string][]).map(([t,l])=>(
+          {([["mine","Mis notificaciones"],["review",`Revisar${pending.length>0?` (${pending.length})`:""}`]] as [string,string][]).map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t as "mine"|"review")}
               style={{padding:"7px 16px",borderRadius:99,border:`1.5px solid ${tab===t?"var(--accent)":"var(--border2)"}`,background:tab===t?"rgba(232,255,71,.08)":"none",cursor:"pointer",fontFamily:"var(--font-b)",fontSize:13,fontWeight:600,color:tab===t?"var(--accent)":"var(--muted)"}}>
               {l}
