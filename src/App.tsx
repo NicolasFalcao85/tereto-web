@@ -5,13 +5,13 @@ const SUPABASE_ANON_KEY = "sb_publishable_XP97uQLTvyBvGvhVTApwDA_V0g1hAmq";
 
 interface User { id: string; email: string; user_metadata: { full_name?: string; avatar_url?: string }; }
 interface Profile { id: string; username: string|null; full_name: string|null; avatar_url: string|null; points: number; is_private?: boolean; streak_count?: number; referral_code?: string|null; }
-interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; expires_at?: string|null; profile?: Profile; unlocked?: boolean; likes_count?: number; attempts_count?: number; }
+interface Post { id: string; user_id: string; emoji: string; caption: string; gradient: string; image_url?: string|null; challenge_type: "trivia"|"photo"; prompt: string; hint: string|null; max_attempts: number; created_at: string; visibility?: "public"|"friends"; expires_at?: string|null; options?: string[]|null; profile?: Profile; unlocked?: boolean; likes_count?: number; attempts_count?: number; }
 interface Follow { id: string; follower_id: string; following_id: string; status: "pending"|"accepted"|"rejected"; created_at: string; profile?: Profile; }
 
 function getToken() { return localStorage.getItem("sb_access_token") ?? ""; }
 
 // Never include correct_answer — validated server-side via validate_trivia_answer RPC
-const POST_COLS = "id,user_id,emoji,caption,gradient,image_url,challenge_type,prompt,hint,max_attempts,created_at,visibility,likes_count,expires_at";
+const POST_COLS = "id,user_id,emoji,caption,gradient,image_url,challenge_type,prompt,hint,max_attempts,created_at,visibility,likes_count,expires_at,options";
 const POST_SELECT = `${POST_COLS},profile:profiles(id,full_name,username,avatar_url,is_private)`;
 
 const APP_URL = "https://tereto-web.vercel.app";
@@ -499,10 +499,13 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
 function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose: ()=>void; onUnlock: (id:string, photoFile?: File)=>Promise<void>; user: User }) {
   const isOwn = post.user_id === user.id;
   const [answer, setAnswer] = useState("");
+  const [selectedOption, setSelectedOption] = useState<number|null>(null);
+  const [wrongOption, setWrongOption] = useState<number|null>(null);
   const [attempts, setAttempts] = useState(post.max_attempts);
   const [attemptsLoaded, setAttemptsLoaded] = useState(false);
   const [status, setStatus] = useState<"idle"|"wrong"|"success"|"pending"|"uploading">("idle");
   const [sharingResult, setSharingResult] = useState(false);
+  const hasOptions = post.challenge_type==="trivia" && Array.isArray(post.options) && post.options.length>0;
   const [uploadError, setUploadError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showHint, setShowHint] = useState(false);
@@ -550,21 +553,24 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
     }
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(optIndex?: number) {
     if (post.challenge_type==="trivia") {
-      if (!answer.trim()||submitting) return;
+      const ans = hasOptions ? (post.options![optIndex??selectedOption??-1]??"") : answer.trim();
+      if (!ans||submitting) return;
+      if (hasOptions && optIndex!==undefined) setSelectedOption(optIndex);
       setSubmitting(true);
       try {
         const isCorrect = await sbFetch("rpc/validate_trivia_answer", {
           method: "POST",
-          body: JSON.stringify({ p_post_id: post.id, p_answer: answer.trim() }),
+          body: JSON.stringify({ p_post_id: post.id, p_answer: ans }),
         });
         if (isCorrect===true) {
           setStatus("success"); setTimeout(()=>onUnlock(post.id),1400);
         } else {
           await saveAttempt();
           setAttempts(a=>a-1); setStatus("wrong");
-          setTimeout(()=>{ setStatus("idle"); setSubmitting(false); },1200);
+          if (hasOptions) setWrongOption(optIndex??selectedOption??null);
+          setTimeout(()=>{ setStatus("idle"); setSubmitting(false); setSelectedOption(null); setWrongOption(null); },1200);
         }
       } catch {
         setSubmitting(false);
@@ -583,7 +589,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
     }
   }
 
-  const canSubmit = post.challenge_type==="trivia" ? attempts>0&&!!answer.trim()&&!submitting : !!photoFile;
+  const canSubmit = post.challenge_type==="trivia" ? attempts>0&&(hasOptions?selectedOption!==null:!!answer.trim())&&!submitting : !!photoFile;
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
@@ -636,10 +642,30 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
             {showHint&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(255,235,100,.06)",border:"1px solid rgba(255,235,100,.2)",fontSize:13,color:"#FFE66D",marginBottom:14}}>💡 {post.hint}</div>}
             {post.challenge_type==="trivia"&&(
               <>
-                <input ref={inputRef} value={answer} onChange={e=>setAnswer(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSubmit()} placeholder="Tu respuesta…" disabled={attempts===0}
-                  style={{width:"100%",padding:"13px 16px",background:status==="wrong"?"rgba(255,107,107,.08)":"var(--surface2)",border:`1.5px solid ${status==="wrong"?"#FF6B6B":"var(--border2)"}`,borderRadius:13,color:"var(--text)",fontSize:15,fontFamily:"var(--font-b)",outline:"none",marginBottom:6}}/>
-                {status==="wrong"&&<div style={{fontSize:12,color:"#FF6B6B",marginBottom:10,paddingLeft:4}}>Incorrecto. {attempts>0?`Te quedan ${attempts} intento${attempts!==1?"s":""}.`:"Sin más intentos."}</div>}
-                <div style={{display:"flex",gap:5,marginBottom:16}}>
+                {hasOptions?(
+                  <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+                    {post.options!.map((opt,i)=>{
+                      const letters = ["A","B","C","D"];
+                      const isSelected = selectedOption===i;
+                      const isWrong = wrongOption===i;
+                      return (
+                        <button key={i} disabled={attempts===0||submitting} onClick={()=>handleSubmit(i)}
+                          style={{width:"100%",padding:"13px 16px",background:isWrong?"rgba(255,107,107,.1)":isSelected?"rgba(232,255,71,.1)":"var(--surface2)",border:`1.5px solid ${isWrong?"#FF6B6B":isSelected?"var(--accent)":"var(--border2)"}`,borderRadius:13,cursor:attempts===0||submitting?"default":"pointer",display:"flex",alignItems:"center",gap:12,textAlign:"left",transition:"all .15s",fontFamily:"var(--font-b)"}}>
+                          <span style={{width:28,height:28,borderRadius:8,background:isWrong?"#FF6B6B":isSelected?"var(--accent)":"var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:isSelected||isWrong?"#0A0A0E":"var(--muted)",flexShrink:0}}>{letters[i]}</span>
+                          <span style={{fontSize:14,color:isWrong?"#FF6B6B":isSelected?"var(--accent)":"var(--text)",fontWeight:isSelected?600:400}}>{opt}</span>
+                        </button>
+                      );
+                    })}
+                    {status==="wrong"&&<div style={{fontSize:12,color:"#FF6B6B",paddingLeft:4}}>Incorrecto. {attempts>0?`Te quedan ${attempts} intento${attempts!==1?"s":""}.`:"Sin más intentos."}</div>}
+                  </div>
+                ):(
+                  <>
+                    <input ref={inputRef} value={answer} onChange={e=>setAnswer(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSubmit()} placeholder="Tu respuesta…" disabled={attempts===0}
+                      style={{width:"100%",padding:"13px 16px",background:status==="wrong"?"rgba(255,107,107,.08)":"var(--surface2)",border:`1.5px solid ${status==="wrong"?"#FF6B6B":"var(--border2)"}`,borderRadius:13,color:"var(--text)",fontSize:15,fontFamily:"var(--font-b)",outline:"none",marginBottom:6}}/>
+                    {status==="wrong"&&<div style={{fontSize:12,color:"#FF6B6B",marginBottom:10,paddingLeft:4}}>Incorrecto. {attempts>0?`Te quedan ${attempts} intento${attempts!==1?"s":""}.`:"Sin más intentos."}</div>}
+                  </>
+                )}
+                <div style={{display:"flex",gap:5,marginBottom:hasOptions?4:16}}>
                   {Array.from({length:post.max_attempts}).map((_,i)=><div key={i} style={{flex:1,height:3,borderRadius:99,background:i<attempts?"var(--accent)":"var(--border2)",transition:"background .3s"}}/>)}
                 </div>
               </>
@@ -671,10 +697,13 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
               </div>
             )}
             {uploadError&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(255,107,107,.08)",border:"1px solid #FF6B6B",fontSize:13,color:"#FF6B6B",marginBottom:8}}>{uploadError}</div>}
-            <button onClick={handleSubmit} disabled={!canSubmit}
-              style={{width:"100%",padding:"15px",background:canSubmit?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:canSubmit?"pointer":"default",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canSubmit?"#0A0A0E":"var(--muted)",transition:"all .2s"}}>
-              {submitting?"Verificando...":attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":post.challenge_type==="photo"?uploadError?"Reintentar 📸":"Enviar foto 📸":"Responder →"}
-            </button>
+            {(!hasOptions||post.challenge_type==="photo")&&(
+              <button onClick={()=>handleSubmit()} disabled={!canSubmit}
+                style={{width:"100%",padding:"15px",background:canSubmit?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:canSubmit?"pointer":"default",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canSubmit?"#0A0A0E":"var(--muted)",transition:"all .2s"}}>
+                {submitting?"Verificando...":attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":post.challenge_type==="photo"?uploadError?"Reintentar 📸":"Enviar foto 📸":"Responder →"}
+              </button>
+            )}
+            {hasOptions&&submitting&&<div style={{textAlign:"center",padding:"8px",fontSize:13,color:"var(--muted)"}}>Verificando…</div>}
           </>
         ):null}
       </div>
@@ -930,7 +959,8 @@ function SocialLists({ userId, followingIds, onFollowChange, onProfileTap }: { u
 function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>void; onSaved: ()=>void }) {
   const [caption, setCaption] = useState(post.caption);
   const [prompt, setPrompt] = useState(post.prompt);
-  const [answer, setAnswer] = useState(""); // correct_answer no se envía al cliente por seguridad
+  const [editOptions, setEditOptions] = useState<string[]>(post.options&&post.options.length>0?[...post.options]:["","","",""]);
+  const [editCorrectIndex, setEditCorrectIndex] = useState(0);
   const [hint, setHint] = useState(post.hint||"");
   const [visibility, setVisibility] = useState<"public"|"friends">(post.visibility||"public");
   const [saving, setSaving] = useState(false);
@@ -940,7 +970,10 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
     if (!caption.trim()||!prompt.trim()) return;
     setSaving(true);
     const body: Record<string,unknown> = { caption, prompt, hint:hint||null, visibility };
-    if (post.challenge_type==="trivia" && answer.trim()) body.correct_answer = answer.trim(); // solo actualiza si escribió algo nuevo
+    if (post.challenge_type==="trivia" && editOptions.every(o=>o.trim())) {
+      body.options = editOptions.map(o=>o.trim());
+      body.correct_answer = editOptions[editCorrectIndex].trim();
+    }
     try {
       const data = await sbFetch(`posts?id=eq.${post.id}`, { method:"PATCH", body:JSON.stringify(body), headers:{ Prefer:"return=minimal" } });
       if (data===null) { onSaved(); onClose(); } else setError("Error al guardar. Intentá de nuevo.");
@@ -966,9 +999,24 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
           </div>
           {post.challenge_type==="trivia"&&(
             <div>
-              <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:6}}>NUEVA RESPUESTA CORRECTA</div>
-              <input value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Dejá vacío para mantener la actual"
-                style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+              <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:8}}>OPCIONES (tocá la letra para marcar la correcta)</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {editOptions.map((opt,i)=>{
+                  const letters=["A","B","C","D"];
+                  const isCorrect=editCorrectIndex===i;
+                  return (
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <button type="button" onClick={()=>setEditCorrectIndex(i)}
+                        style={{width:30,height:30,borderRadius:8,background:isCorrect?"var(--accent)":"var(--surface2)",border:`1.5px solid ${isCorrect?"var(--accent)":"var(--border2)"}`,cursor:"pointer",fontSize:11,fontWeight:800,color:isCorrect?"#0A0A0E":"var(--muted)",flexShrink:0}}>
+                        {letters[i]}
+                      </button>
+                      <input value={opt} onChange={e=>setEditOptions(prev=>{const n=[...prev];n[i]=e.target.value;return n;})}
+                        placeholder={`Opción ${letters[i]}`}
+                        style={{flex:1,background:isCorrect?"rgba(232,255,71,.05)":"var(--surface2)",border:`1.5px solid ${isCorrect?"rgba(232,255,71,.4)":"var(--border2)"}`,borderRadius:10,padding:"9px 12px",color:"var(--text)",fontSize:13,fontFamily:"var(--font-b)",outline:"none"}}/>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
           <div>
@@ -1417,7 +1465,8 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
   const [visibility, setVisibility] = useState<"public"|"friends">("public");
   const [challengeType, setChallengeType] = useState<"trivia"|"photo">("trivia");
   const [prompt, setPrompt] = useState("");
-  const [answer, setAnswer] = useState("");
+  const [options, setOptions] = useState(["","","",""]);
+  const [correctIndex, setCorrectIndex] = useState(0);
   const [hint, setHint] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
@@ -1434,7 +1483,7 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
     });
   }
 
-  const canPublish = caption.trim() && prompt.trim() && (challengeType==="photo" || answer.trim());
+  const canPublish = caption.trim() && prompt.trim() && (challengeType==="photo" || options.every(o=>o.trim()));
 
   async function handlePublish() {
     if (!canPublish || publishing) return;
@@ -1445,9 +1494,11 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
         image_url = await uploadImage(user.id, imageFile);
         if (!image_url) { setError("Error al subir la imagen. Intentá de nuevo."); setPublishing(false); return; }
       }
+      const triviaOptions = challengeType==="trivia" ? options.map(o=>o.trim()) : null;
+      const correctAnswer = challengeType==="trivia" ? options[correctIndex].trim() : null;
       const data = await sbFetch("posts", {
         method: "POST",
-        body: JSON.stringify({ user_id:user.id, emoji:"🖼️", caption, gradient, image_url, challenge_type:challengeType, prompt, correct_answer:answer||null, hint:hint||null, max_attempts:3, visibility, expires_at: expiresIn ? new Date(Date.now()+expiresIn*3600000).toISOString() : null }),
+        body: JSON.stringify({ user_id:user.id, emoji:"🖼️", caption, gradient, image_url, challenge_type:challengeType, prompt, correct_answer:correctAnswer, options:triviaOptions, hint:hint||null, max_attempts:3, visibility, expires_at: expiresIn ? new Date(Date.now()+expiresIn*3600000).toISOString() : null }),
         headers: { Prefer:"return=representation" }
       });
       if (data && !data.error && !data.message) { showToast("✅ ¡Reto publicado!"); onPublished(); }
@@ -1528,8 +1579,24 @@ function CreatePage({ user, onPublished }: { user: User; onPublished: ()=>void }
           <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder={challengeType==="trivia"?"Escribí la pregunta...":"Describí qué foto tiene que subir el usuario..."} rows={2}
             style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",resize:"none"}}/>
           {challengeType==="trivia"&&(
-            <input value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Respuesta correcta (obligatorio)..."
-              style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.5}}>Escribí las 4 opciones y tocá la correcta para marcarla.</div>
+              {options.map((opt,i)=>{
+                const letters=["A","B","C","D"];
+                const isCorrect=correctIndex===i;
+                return (
+                  <div key={i} style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <button type="button" onClick={()=>setCorrectIndex(i)}
+                      style={{width:32,height:32,borderRadius:8,background:isCorrect?"var(--accent)":"var(--surface2)",border:`1.5px solid ${isCorrect?"var(--accent)":"var(--border2)"}`,cursor:"pointer",fontSize:12,fontWeight:800,color:isCorrect?"#0A0A0E":"var(--muted)",flexShrink:0,transition:"all .15s"}}>
+                      {letters[i]}
+                    </button>
+                    <input value={opt} onChange={e=>setOptions(prev=>{const n=[...prev];n[i]=e.target.value;return n;})}
+                      placeholder={`Opción ${letters[i]}${isCorrect?" (correcta)":""}`}
+                      style={{flex:1,background:isCorrect?"rgba(232,255,71,.05)":"var(--surface2)",border:`1.5px solid ${isCorrect?"rgba(232,255,71,.4)":"var(--border2)"}`,borderRadius:12,padding:"11px 12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",transition:"all .15s"}}/>
+                  </div>
+                );
+              })}
+            </div>
           )}
           <input value={hint} onChange={e=>setHint(e.target.value)} placeholder="Pista (opcional)..."
             style={{width:"100%",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,padding:"12px",color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none"}}/>
