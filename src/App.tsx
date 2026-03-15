@@ -683,8 +683,11 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
 
 interface PendingUnlock { id: string; photo_url: string; unlocked_at: string; post: Post; challenger: Profile; }
 
+interface PendingFollowReq { id: string; follower_id: string; created_at: string; profile: Profile; }
+
 function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; onReviewed: ()=>void; onOpenChallenge?: (post: Post)=>void }) {
   const [pending, setPending] = useState<PendingUnlock[]>([]);
+  const [pendingFollowReqs, setPendingFollowReqs] = useState<PendingFollowReq[]>([]);
   const [myNotifs, setMyNotifs] = useState<{id:string;type:string;post:Post;unlock?:{reject_reason:string|null};duel?:{id:string;challenger:{id:string;full_name:string|null;avatar_url:string|null}}|null;created_at:string;read:boolean}[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"mine"|"review">("mine");
@@ -701,6 +704,9 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
       if (Array.isArray(notifData)) setMyNotifs(notifData);
       // Mark as read
       await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false`, { method:"PATCH", body:JSON.stringify({read:true}), headers:{Prefer:"return=minimal"} });
+      // Solicitudes de seguimiento pendientes
+      const followReqData = await sbFetch(`follows?following_id=eq.${user.id}&status=eq.pending&select=id,follower_id,created_at,profile:profiles!follower_id(id,full_name,username,avatar_url)&order=created_at.desc`);
+      if (Array.isArray(followReqData)) setPendingFollowReqs(followReqData);
       // Pending reviews of my posts
       const myPostsData = await sbFetch(`posts?user_id=eq.${user.id}&select=id`);
       const myPostIds = Array.isArray(myPostsData) ? myPostsData.map((p:{id:string})=>p.id) : [];
@@ -710,6 +716,18 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
       }
     } catch { /* mostrar estado vacío */ }
     setLoading(false);
+  }
+
+  async function handleFollowReq(followId: string, accept: boolean, followerId: string) {
+    await sbFetch(`follows?id=eq.${followId}`, { method:"PATCH", body:JSON.stringify({status:accept?"accepted":"rejected"}), headers:{Prefer:"return=minimal"} });
+    if (accept) {
+      await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:followerId, type:"follow_accepted" }), headers:{Prefer:"return=minimal"} });
+      showToast("✅ Solicitud aceptada");
+    } else {
+      showToast("Solicitud rechazada");
+    }
+    setPendingFollowReqs(prev=>prev.filter(f=>f.id!==followId));
+    onReviewed();
   }
 
   async function handleReview(unlockId: string, approve: boolean, challengerUserId: string, postId: string, reason?: string) {
@@ -747,7 +765,35 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
       <div style={{padding:"12px"}}>
         {loading?<div style={{display:"flex",justifyContent:"center",padding:"60px 0"}}><Spinner/></div>:
          tab==="mine"?(
-           myNotifs.length===0?(
+           <>
+           {pendingFollowReqs.length>0&&(
+             <div style={{marginBottom:12}}>
+               <div style={{fontSize:11,color:"var(--muted)",fontWeight:700,letterSpacing:.5,marginBottom:8,paddingLeft:2}}>SOLICITUDES DE SEGUIMIENTO</div>
+               <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                 {pendingFollowReqs.map(f=>(
+                   <div key={f.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+                     <Avatar size={38} img={f.profile?.avatar_url}/>
+                     <div style={{flex:1}}>
+                       <div style={{fontSize:14,fontWeight:600}}>{f.profile?.full_name||f.profile?.username||"Usuario"}</div>
+                       {f.profile?.username&&<div style={{fontSize:12,color:"var(--muted)"}}>@{f.profile.username}</div>}
+                       <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{timeAgo(f.created_at)}</div>
+                     </div>
+                     <div style={{display:"flex",gap:8,flexShrink:0}}>
+                       <button onClick={()=>handleFollowReq(f.id,false,f.follower_id)}
+                         style={{padding:"7px 12px",background:"rgba(255,107,107,.08)",border:"1.5px solid #FF6B6B",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:12,fontWeight:800,color:"#FF6B6B"}}>
+                         ✕
+                       </button>
+                       <button onClick={()=>handleFollowReq(f.id,true,f.follower_id)}
+                         style={{padding:"7px 12px",background:"rgba(232,255,71,.08)",border:"1.5px solid var(--accent)",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:12,fontWeight:800,color:"var(--accent)"}}>
+                         ✓ Aceptar
+                       </button>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+           )}
+           {myNotifs.filter(n=>n.type!=="follow_request").length===0&&pendingFollowReqs.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
               <div style={{fontSize:48,marginBottom:12}}>🔔</div>
               <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:8}}>Sin notificaciones</div>
@@ -755,7 +801,7 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
             </div>
            ):(
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {myNotifs.map(n=>(
+              {myNotifs.filter(n=>n.type!=="follow_request").map(n=>(
                 <div key={n.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{fontSize:28}}>
                     {n.type==="unlock_approved"?"✅":n.type==="unlock_rejected"?"❌":n.type==="follow_accepted"?"🤝":n.type==="new_comment"?"💬":n.type==="duel_request"?"⚔️":"👋"}
@@ -796,7 +842,8 @@ function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; 
                 </div>
               ))}
             </div>
-           )
+           )}
+           </>
          ):(
            pending.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
