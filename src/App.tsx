@@ -1093,8 +1093,8 @@ function CameraModal({ onCapture, onClose }: { onCapture: (file: File) => void; 
   function close() { stream?.getTracks().forEach(t => t.stop()); onClose(); }
 
   return (
-    <div style={{position:"fixed",inset:0,background:"#000",zIndex:80,display:"flex",flexDirection:"column"}}>
-      <video ref={videoRef} playsInline muted style={{width:"100%",height:280,objectFit:"cover",flexShrink:0}}/>
+    <div style={{position:"fixed",inset:0,background:"#000",zIndex:80,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <video ref={videoRef} playsInline muted style={{flex:1,width:"100%",objectFit:"cover",minHeight:0}}/>
       {!ready && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}><Spinner size={40}/></div>}
       <div style={{height:120,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",background:"rgba(0,0,0,.85)"}}>
         <button onClick={close} style={{background:"none",border:"1.5px solid rgba(255,255,255,.3)",borderRadius:99,padding:"10px 20px",color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
