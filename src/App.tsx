@@ -314,6 +314,7 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
   const [attempts, setAttempts] = useState(post.max_attempts);
   const [attemptsLoaded, setAttemptsLoaded] = useState(false);
   const [status, setStatus] = useState<"idle"|"wrong"|"success"|"pending"|"uploading">("idle");
+  const [uploadError, setUploadError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [photoFile, setPhotoFile] = useState<File|null>(null);
@@ -370,12 +371,13 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
     } else {
       if (!photoFile) return;
       setStatus("uploading");
+      setUploadError("");
       try {
         await onUnlock(post.id, photoFile);
         setStatus("pending");
-      } catch {
+      } catch (e: unknown) {
         setStatus("idle");
-        alert("Error al subir la foto. Verificá tu conexión e intentá de nuevo.");
+        setUploadError(e instanceof Error ? e.message : "Error al subir la foto. Intentá de nuevo.");
       }
     }
   }
@@ -454,9 +456,10 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
                 </div>
               </div>
             )}
+            {uploadError&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(255,107,107,.08)",border:"1px solid #FF6B6B",fontSize:13,color:"#FF6B6B",marginBottom:8}}>{uploadError}</div>}
             <button onClick={handleSubmit} disabled={!canSubmit}
               style={{width:"100%",padding:"15px",background:canSubmit?"var(--accent)":"var(--surface2)",border:"none",borderRadius:15,cursor:canSubmit?"pointer":"default",fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,color:canSubmit?"#0A0A0E":"var(--muted)",transition:"all .2s"}}>
-              {submitting?"Verificando...":attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":post.challenge_type==="photo"?"Enviar foto 📸":"Responder →"}
+              {submitting?"Verificando...":attempts===0&&post.challenge_type==="trivia"?"Sin intentos disponibles":post.challenge_type==="photo"?uploadError?"Reintentar 📸":"Enviar foto 📸":"Responder →"}
             </button>
           </>
         ):null}
@@ -1434,13 +1437,14 @@ export default function App() {
 
   async function handleUnlock(postId: string, photoFile?: File) {
     if (!user) return;
-    const post = posts.find(p=>p.id===postId);
-    if (!post) return;
+    const post = challengePost?.id === postId ? challengePost : posts.find(p=>p.id===postId);
+    if (!post) throw new Error("Post no encontrado");
     if (post.challenge_type==="photo" && photoFile) {
       const photo_url = await uploadImage(user.id, photoFile);
-      if (!photo_url) throw new Error("Upload failed");
-      await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
-      return; // modal se cierra desde el propio ChallengeModal al setStatus("pending")
+      if (!photo_url) throw new Error("No se pudo subir la foto. Verificá tu conexión.");
+      const result = await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"pending", photo_url }), headers:{ Prefer:"return=minimal" } });
+      if (result && result.message) throw new Error(result.message);
+      return;
     } else {
       await sbFetch("unlocks", { method:"POST", body:JSON.stringify({ user_id:user.id, post_id:postId, status:"approved" }), headers:{ Prefer:"return=minimal" } });
       await sbFetch(`profiles?id=eq.${user.id}`, { method:"PATCH", body:JSON.stringify({ points:(unlockedIds.length+1)*150 }), headers:{ Prefer:"return=minimal" } });
