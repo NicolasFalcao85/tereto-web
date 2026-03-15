@@ -2237,14 +2237,16 @@ export default function App() {
           {showInstallBanner&&(
             <>
               <div onClick={dismissInstall} style={{position:"fixed",inset:0,zIndex:18}}/>
-              <div style={{position:"fixed",bottom:74,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:480,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,zIndex:19,boxShadow:"0 4px 24px rgba(0,0,0,.4)",animation:"fadeUp .3s ease both"}}>
-                <div style={{fontSize:28,flexShrink:0}}>⚡</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800}}>Instalá TeReto</div>
-                  <div style={{fontSize:12,color:"var(--muted)",marginTop:1}}>Accedé más rápido desde tu pantalla de inicio</div>
+              <div style={{position:"fixed",bottom:74,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:480,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:16,padding:"14px 16px",zIndex:19,boxShadow:"0 4px 24px rgba(0,0,0,.4)",animation:"fadeUp .3s ease both"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                  <span style={{fontSize:24}}>⚡</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"var(--font-d)",fontSize:14,fontWeight:800}}>Instalá TeReto</div>
+                    <div style={{fontSize:12,color:"var(--muted)"}}>Accedé más rápido desde tu pantalla de inicio</div>
+                  </div>
+                  <button onClick={dismissInstall} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",fontSize:16,color:"var(--muted)",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
                 </div>
-                <button onClick={handleInstall} style={{padding:"9px 16px",background:"var(--accent)",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:13,fontWeight:800,color:"#0A0A0E",flexShrink:0}}>Instalar</button>
-                <button onClick={dismissInstall} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",fontSize:16,color:"var(--muted)",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+                <button onClick={handleInstall} style={{width:"100%",padding:"11px",background:"var(--accent)",border:"none",borderRadius:12,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:14,fontWeight:800,color:"#0A0A0E"}}>Instalar app</button>
               </div>
             </>
           )}
