@@ -1,4 +1,9 @@
 {
   "buildCommand": "npx vite build",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "build": {
+    "env": {
+      "NODE_VERSION": "20"
+    }
+  }
 }
