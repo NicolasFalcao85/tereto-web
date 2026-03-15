@@ -742,8 +742,8 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
   );
 }
 
-function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange, onProfileTap }: { user: User; posts: Post[]; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
-  const myPosts = posts.filter(p=>p.user_id===user.id);
+function ProfilePage({ user, unlockedIds, onLogout, onPostDeleted, followingIds, onFollowChange, onProfileTap }: { user: User; unlockedIds: string[]; onLogout: ()=>void; onPostDeleted: ()=>void; followingIds: string[]; onFollowChange: ()=>void; onProfileTap: (userId: string)=>void }) {
+  const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [editingPost, setEditingPost] = useState<Post|null>(null);
   const [username, setUsername] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
@@ -755,6 +755,8 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
   const [followRequests, setFollowRequests] = useState<Follow[]>([]);
 
   useEffect(()=>{
+    sbFetch(`posts?user_id=eq.${user.id}&select=${POST_SELECT}&order=created_at.desc`)
+      .then(data=>{ if(Array.isArray(data)) setMyPosts(data); });
     sbFetch(`profiles?id=eq.${user.id}&select=username,is_private`).then(data=>{
       if (Array.isArray(data)&&data.length>0) {
         if (data[0].username) setUsername(data[0].username);
@@ -800,6 +802,7 @@ function ProfilePage({ user, posts, unlockedIds, onLogout, onPostDeleted, follow
   async function handleDeletePost(postId: string) {
     if (!confirm("¿Eliminar este post?")) return;
     await sbFetch(`posts?id=eq.${postId}`, { method:"DELETE" });
+    setMyPosts(prev=>prev.filter(p=>p.id!==postId));
     onPostDeleted();
   }
 
@@ -1495,7 +1498,7 @@ export default function App() {
           {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} currentUser={user}/>}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
           {activeNav==="notifs"&&<NotificationsPage user={user} posts={posts} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }}/>}
-          {activeNav==="profile"&&<ProfilePage user={user} posts={posts} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
+          {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
           <BottomNav active={activeNav} onChange={id=>{ setViewingProfileId(null); setActiveNav(id); }} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
           {viewingProfileId&&<PublicProfilePage profileId={viewingProfileId} currentUser={user} followingIds={followingIds} onFollowChange={loadFollowing} onClose={()=>setViewingProfileId(null)} onOpenChallenge={p=>{ setChallengePost(p); }} likedIds={likedIds} onLike={handleLike} unlockedIds={unlockedIds}/>}
