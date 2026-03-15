@@ -327,12 +327,18 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
 
   useEffect(()=>{
     if (post.challenge_type==="trivia") setTimeout(()=>inputRef.current?.focus(),100);
-    // Load real attempts from DB
     if (!isOwn) {
-      sbFetch(`attempts?user_id=eq.${user.id}&post_id=eq.${post.id}&select=count`).then(data=>{
-        if (Array.isArray(data) && data.length>0) setAttempts(Math.max(0, post.max_attempts - data[0].count));
-        setAttemptsLoaded(true);
-      });
+      if (post.challenge_type==="photo") {
+        // Check if already has a pending unlock
+        sbFetch(`unlocks?user_id=eq.${user.id}&post_id=eq.${post.id}&status=eq.pending&select=id`).then(data=>{
+          if (Array.isArray(data) && data.length>0) setStatus("pending");
+        });
+      } else {
+        sbFetch(`attempts?user_id=eq.${user.id}&post_id=eq.${post.id}&select=count`).then(data=>{
+          if (Array.isArray(data) && data.length>0) setAttempts(Math.max(0, post.max_attempts - data[0].count));
+          setAttemptsLoaded(true);
+        });
+      }
     }
   },[post.challenge_type, post.id, user.id, isOwn]);
 
