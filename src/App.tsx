@@ -376,47 +376,81 @@ function ReactionsBar({ postId, currentUserId }: { postId: string; currentUserId
   );
 }
 
-function ChallengeUserModal({ postId, currentUserId, onClose }: { postId: string; currentUserId: string; onClose: ()=>void }) {
-  const [users, setUsers] = useState<Profile[]>([]);
-  const [search, setSearch] = useState("");
-  const [sent, setSent] = useState<string[]>([]);
+function DuelModal({ challengedPost, currentUser, onClose }: { challengedPost: Post; currentUser: User; onClose: ()=>void }) {
+  const [myPosts, setMyPosts] = useState<Post[]>([]);
+  const [selectedId, setSelectedId] = useState<string|null>(null);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
 
   useEffect(()=>{
-    sbFetch(`follows?follower_id=eq.${currentUserId}&status=eq.accepted&select=profile:profiles!follows_following_id_fkey(id,full_name,username,avatar_url)`)
-      .then(data=>{ if(Array.isArray(data)) setUsers(data.map((f:{profile:Profile})=>f.profile).filter(Boolean)); });
-  },[currentUserId]);
+    sbFetch(`posts?user_id=eq.${currentUser.id}&select=${POST_COLS}&order=created_at.desc&limit=10`)
+      .then(data=>{ if(Array.isArray(data)) setMyPosts(data); });
+  },[currentUser.id]);
 
-  async function handleChallenge(targetId: string, name: string) {
-    await sbFetch("notifications", { method:"POST", body:JSON.stringify({ user_id:targetId, type:"direct_challenge", post_id:postId }), headers:{ Prefer:"return=minimal" } });
-    setSent(prev=>[...prev,targetId]);
-    showToast(`🎯 Reto enviado a ${name}`);
+  async function handleSend() {
+    if (!selectedId||sending) return;
+    setSending(true);
+    try {
+      const duelData = await sbFetch("duels", {
+        method:"POST",
+        body:JSON.stringify({ challenger_id:currentUser.id, challenged_id:challengedPost.user_id, challenger_post_id:selectedId, challenged_post_id:challengedPost.id, status:"pending" }),
+        headers:{ Prefer:"return=representation" }
+      });
+      const duelId = Array.isArray(duelData)&&duelData.length>0 ? duelData[0].id : null;
+      await sbFetch("notifications", {
+        method:"POST",
+        body:JSON.stringify({ user_id:challengedPost.user_id, type:"duel_request", post_id:selectedId, duel_id:duelId }),
+        headers:{ Prefer:"return=minimal" }
+      });
+      setSent(true);
+      showToast("⚔️ ¡Duelo enviado!");
+      setTimeout(onClose, 1500);
+    } catch { showToast("Error al enviar el duelo."); }
+    setSending(false);
   }
-
-  const filtered = search ? users.filter(u=>(u.full_name||"").toLowerCase().includes(search.toLowerCase())||(u.username||"").toLowerCase().includes(search.toLowerCase())) : users;
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
-        <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)",margin:"0 auto 18px"}}/>
-        <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:14}}>🎯 Desafiar a alguien</div>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..."
-          style={{padding:"10px 14px",background:"var(--surface2)",border:"1.5px solid var(--border2)",borderRadius:12,color:"var(--text)",fontSize:14,fontFamily:"var(--font-b)",outline:"none",marginBottom:12}}/>
-        <div style={{overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:8}}>
-          {users.length===0&&<div style={{textAlign:"center",padding:"24px",color:"var(--muted)",fontSize:13}}>Seguí a alguien para poder desafiarlos.</div>}
-          {filtered.map(u=>(
-            <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px",background:"var(--surface2)",borderRadius:12}}>
-              <Avatar size={38} img={u.avatar_url}/>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:600,fontSize:13}}>{u.full_name||"Usuario"}</div>
-                {u.username&&<div style={{fontSize:11,color:"var(--muted)"}}>@{u.username}</div>}
-              </div>
-              <button onClick={()=>!sent.includes(u.id)&&handleChallenge(u.id, u.full_name||u.username||"Usuario")}
-                style={{padding:"7px 14px",borderRadius:99,border:`1.5px solid ${sent.includes(u.id)?"var(--border2)":"var(--accent)"}`,background:sent.includes(u.id)?"var(--surface)":"rgba(232,255,71,.1)",cursor:sent.includes(u.id)?"default":"pointer",fontSize:12,fontWeight:700,color:sent.includes(u.id)?"var(--muted)":"var(--accent)",fontFamily:"var(--font-b)"}}>
-                {sent.includes(u.id)?"✓ Enviado":"🎯 Desafiar"}
-              </button>
-            </div>
-          ))}
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"24px 20px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+        <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)",margin:"0 auto 16px"}}/>
+        <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:4}}>⚔️ Duelo 1v1</div>
+        <div style={{fontSize:13,color:"var(--muted)",marginBottom:14,lineHeight:1.5}}>Elegí uno de tus retos. Vos jugás el de ellos, ellos juegan el tuyo.</div>
+        {/* Reto del rival */}
+        <div style={{padding:"10px 12px",background:"rgba(255,107,107,.06)",border:"1px solid rgba(255,107,107,.2)",borderRadius:12,marginBottom:14,fontSize:12}}>
+          <span style={{color:"var(--muted)"}}>Su reto: </span>
+          <span style={{color:"var(--text)",fontWeight:600}}>{challengedPost.prompt.slice(0,60)}{challengedPost.prompt.length>60?"…":""}</span>
         </div>
+        {sent?(
+          <div style={{textAlign:"center",padding:"20px 0",fontSize:32}}>⚔️<div style={{fontFamily:"var(--font-d)",fontSize:16,fontWeight:800,marginTop:8,color:"var(--accent)"}}>¡Duelo enviado!</div></div>
+        ):(
+          <>
+            <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,letterSpacing:.5,marginBottom:10}}>TU RETO CONTRA-ATAQUE</div>
+            {myPosts.length===0?(
+              <div style={{textAlign:"center",padding:"24px",color:"var(--muted)",fontSize:13}}>No tenés retos publicados aún.</div>
+            ):(
+              <div style={{overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+                {myPosts.map(p=>{
+                  const sel = selectedId===p.id;
+                  return (
+                    <div key={p.id} onClick={()=>setSelectedId(p.id)}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:sel?"rgba(232,255,71,.08)":"var(--surface2)",border:`1.5px solid ${sel?"var(--accent)":"var(--border2)"}`,borderRadius:12,cursor:"pointer",transition:"all .15s"}}>
+                      <div style={{width:40,height:40,borderRadius:10,background:p.image_url?`url(${p.image_url})`:(p.gradient||"var(--surface)"),backgroundSize:"cover",backgroundPosition:"center",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0,overflow:"hidden"}}>{!p.image_url&&p.emoji}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:sel?"var(--accent)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.caption}</div>
+                        <div style={{fontSize:11,color:"var(--muted)"}}>{p.challenge_type==="trivia"?"🧠 Trivia":"📸 Foto"}</div>
+                      </div>
+                      {sel&&<span style={{color:"var(--accent)",fontSize:16}}>✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <button onClick={handleSend} disabled={!selectedId||sending}
+              style={{width:"100%",padding:"14px",background:selectedId&&!sending?"var(--accent)":"var(--surface2)",border:"none",borderRadius:14,cursor:selectedId&&!sending?"pointer":"default",fontFamily:"var(--font-d)",fontSize:15,fontWeight:800,color:selectedId&&!sending?"#0A0A0E":"var(--muted)"}}>
+              {sending?"Enviando…":"⚔️ Enviar duelo"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -462,15 +496,15 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
           <span style={{fontSize:18}}>{liked?"❤️":"🤍"}</span>
           <span style={{fontSize:13,fontWeight:600,color:liked?"#FF6B6B":"var(--muted)"}}>{fmt((post.likes_count||0)+(liked?1:0))}</span>
         </button>
-        {currentUser&&<button onClick={()=>setShowChallengeModal(true)} style={{background:"var(--surface2)",border:"1px solid var(--border)",cursor:"pointer",marginLeft:"auto",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:99,fontFamily:"var(--font-b)"}}>
-          <span style={{fontSize:14}}>🎯</span><span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>Desafiar</span>
+        {currentUser&&currentUser.id!==post.user_id&&<button onClick={()=>setShowChallengeModal(true)} style={{background:"var(--surface2)",border:"1px solid var(--border)",cursor:"pointer",marginLeft:"auto",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:99,fontFamily:"var(--font-b)"}}>
+          <span style={{fontSize:14}}>⚔️</span><span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>1v1</span>
         </button>}
-        <button onClick={handleShare} style={{background:copied?"rgba(232,255,71,.1)":"var(--surface2)",border:`1px solid ${copied?"rgba(232,255,71,.3)":"var(--border)"}`,cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:99,transition:"all .2s",fontFamily:"var(--font-b)"}}>
+        {post.visibility!=="friends"&&<button onClick={handleShare} style={{background:copied?"rgba(232,255,71,.1)":"var(--surface2)",border:`1px solid ${copied?"rgba(232,255,71,.3)":"var(--border)"}`,cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:99,transition:"all .2s",fontFamily:"var(--font-b)"}}>
           {copied
             ? <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>✓ Copiado</span>
             : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--muted)"}}><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg><span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>Compartir</span></>
           }
-        </button>
+        </button>}
       </div>
       {!post.unlocked&&(
         <div onClick={()=>onOpenChallenge(post)} style={{margin:"0 12px 14px",padding:"10px 14px",background:"rgba(232,255,71,.06)",border:"1px solid rgba(232,255,71,.2)",borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
@@ -491,7 +525,7 @@ function FeedCard({ post, onOpenChallenge, likedIds, onLike, index, onProfileTap
           {showComments&&<CommentsSection postId={post.id} currentUser={currentUser} postOwnerId={post.user_id} onProfileTap={onProfileTap}/>}
         </>
       )}
-      {showChallengeModal&&currentUser&&<ChallengeUserModal postId={post.id} currentUserId={currentUser.id} onClose={()=>setShowChallengeModal(false)}/>}
+      {showChallengeModal&&currentUser&&<DuelModal challengedPost={post} currentUser={currentUser} onClose={()=>setShowChallengeModal(false)}/>}
     </article>
   );
 }
@@ -713,9 +747,9 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
 
 interface PendingUnlock { id: string; photo_url: string; unlocked_at: string; post: Post; challenger: Profile; }
 
-function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>void }) {
+function NotificationsPage({ user, onReviewed, onOpenChallenge }: { user: User; onReviewed: ()=>void; onOpenChallenge?: (post: Post)=>void }) {
   const [pending, setPending] = useState<PendingUnlock[]>([]);
-  const [myNotifs, setMyNotifs] = useState<{id:string;type:string;post:Post;unlock?:{reject_reason:string|null};created_at:string;read:boolean}[]>([]);
+  const [myNotifs, setMyNotifs] = useState<{id:string;type:string;post:Post;unlock?:{reject_reason:string|null};duel?:{id:string;challenger:{id:string;full_name:string|null;avatar_url:string|null}}|null;created_at:string;read:boolean}[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"mine"|"review">("mine");
   const [rejectingId, setRejectingId] = useState<string|null>(null);
@@ -727,7 +761,7 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
     setLoading(true);
     try {
       // My notifications (approved/rejected)
-      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(prompt,emoji),unlock:unlocks(reject_reason)&order=created_at.desc&limit=20`);
+      const notifData = await sbFetch(`notifications?user_id=eq.${user.id}&select=*,post:posts(id,user_id,prompt,emoji,challenge_type,options,hint,max_attempts,gradient,caption,profile:profiles(id,full_name,username,avatar_url)),unlock:unlocks(reject_reason),duel:duels(id,challenger:profiles!challenger_id(id,full_name,avatar_url))&order=created_at.desc&limit=20`);
       if (Array.isArray(notifData)) setMyNotifs(notifData);
       // Mark as read
       await sbFetch(`notifications?user_id=eq.${user.id}&read=eq.false`, { method:"PATCH", body:JSON.stringify({read:true}), headers:{Prefer:"return=minimal"} });
@@ -788,19 +822,27 @@ function NotificationsPage({ user, onReviewed }: { user: User; onReviewed: ()=>v
               {myNotifs.map(n=>(
                 <div key={n.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:14,padding:"14px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{fontSize:28}}>
-                    {n.type==="unlock_approved"?"✅":n.type==="unlock_rejected"?"❌":n.type==="follow_accepted"?"🤝":n.type==="new_comment"?"💬":n.type==="direct_challenge"?"🎯":"👋"}
+                    {n.type==="unlock_approved"?"✅":n.type==="unlock_rejected"?"❌":n.type==="follow_accepted"?"🤝":n.type==="new_comment"?"💬":n.type==="duel_request"?"⚔️":"👋"}
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:600,color:n.type==="unlock_approved"||n.type==="follow_accepted"?"var(--accent)":n.type==="unlock_rejected"?"#FF6B6B":"var(--text)"}}>
-                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":n.type==="unlock_rejected"?"Tu foto fue rechazada":n.type==="follow_accepted"?"¡Alguien aceptó tu solicitud!":n.type==="new_comment"?"Alguien comentó en tu reto":n.type==="direct_challenge"?"¡Te desafiaron directamente!":"Nueva solicitud de seguimiento"}
+                    <div style={{fontSize:13,fontWeight:600,color:n.type==="unlock_approved"||n.type==="follow_accepted"?"var(--accent)":n.type==="unlock_rejected"?"#FF6B6B":n.type==="duel_request"?"#FFB347":"var(--text)"}}>
+                      {n.type==="unlock_approved"?"¡Tu foto fue aprobada!":n.type==="unlock_rejected"?"Tu foto fue rechazada":n.type==="follow_accepted"?"¡Alguien aceptó tu solicitud!":n.type==="new_comment"?"Alguien comentó en tu reto":n.type==="duel_request"?`⚔️ ${n.duel?.challenger?.full_name||"Alguien"} te desafió 1v1`:"Nueva solicitud de seguimiento"}
                     </div>
                     <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>
-                      {(n.type==="unlock_approved"||n.type==="unlock_rejected"||n.type==="new_comment")&&n.post?.prompt?.slice(0,50)} • {timeAgo(n.created_at)}
+                      {(n.type==="unlock_approved"||n.type==="unlock_rejected"||n.type==="new_comment")&&n.post?.prompt?.slice(0,50)}
+                      {n.type==="duel_request"&&n.post&&`Su reto: "${n.post.prompt?.slice(0,40)}…"`}
+                      {" • "}{timeAgo(n.created_at)}
                     </div>
                     {n.type==="unlock_rejected"&&n.unlock?.reject_reason&&(
                       <div style={{marginTop:6,padding:"6px 10px",background:"rgba(255,107,107,.06)",border:"1px solid rgba(255,107,107,.2)",borderRadius:8,fontSize:12,color:"#FF6B6B",fontStyle:"italic"}}>
                         "{n.unlock.reject_reason}"
                       </div>
+                    )}
+                    {n.type==="duel_request"&&n.post&&onOpenChallenge&&(
+                      <button onClick={()=>onOpenChallenge(n.post as Post)}
+                        style={{marginTop:8,padding:"7px 14px",background:"rgba(255,179,71,.1)",border:"1.5px solid #FFB347",borderRadius:10,cursor:"pointer",fontFamily:"var(--font-d)",fontSize:12,fontWeight:800,color:"#FFB347"}}>
+                        ⚔️ Jugar su reto →
+                      </button>
                     )}
                   </div>
                 </div>
@@ -2004,7 +2046,7 @@ export default function App() {
           )}
           {activeNav==="explore"&&<ExplorePage posts={postsWithUnlocked} onOpenChallenge={setChallengePost} likedIds={likedIds} onLike={handleLike} currentUserId={user.id} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId} currentUser={user}/>}
           {activeNav==="create"&&<CreatePage user={user} onPublished={()=>{ loadPosts(); setActiveNav("feed"); }}/>}
-          {activeNav==="notifs"&&<NotificationsPage user={user} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }}/>}
+          {activeNav==="notifs"&&<NotificationsPage user={user} onReviewed={()=>{ loadUnlocks(); loadPendingCount(); loadFollowing(); }} onOpenChallenge={p=>{ setChallengePost(p); setActiveNav("feed"); }}/>}
           {activeNav==="profile"&&<ProfilePage user={user} unlockedIds={unlockedIds} onLogout={handleLogout} onPostDeleted={()=>{ loadPosts(); }} followingIds={followingIds} onFollowChange={loadFollowing} onProfileTap={setViewingProfileId}/>}
           <BottomNav active={activeNav} onChange={id=>{ setViewingProfileId(null); setActiveNav(id); }} pendingCount={pendingCount}/>
           {challengePost&&<ChallengeModal post={challengePost} onClose={()=>setChallengePost(null)} onUnlock={handleUnlock} user={user}/>}
