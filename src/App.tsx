@@ -412,7 +412,13 @@ function DuelModal({ challengedPost, currentUser, onClose }: { challengedPost: P
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
       <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"24px 20px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
-        <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)",margin:"0 auto 16px"}}/>
+        <div style={{display:"flex",alignItems:"center",marginBottom:16}}>
+          <div style={{flex:1}}/>
+          <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)"}}/>
+          <div style={{flex:1,display:"flex",justifyContent:"flex-end"}}>
+            <button onClick={onClose} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,width:28,height:28,cursor:"pointer",color:"var(--muted)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+          </div>
+        </div>
         <div style={{fontFamily:"var(--font-d)",fontSize:18,fontWeight:800,marginBottom:4}}>⚔️ Duelo 1v1</div>
         <div style={{fontSize:13,color:"var(--muted)",marginBottom:14,lineHeight:1.5}}>Elegí uno de tus retos. Vos jugás el de ellos, ellos juegan el tuyo.</div>
         {/* Reto del rival */}
@@ -628,7 +634,13 @@ function ChallengeModal({ post, onClose, onUnlock, user }: { post: Post; onClose
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
       <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"90vh",overflowY:"auto"}}>
-        <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)",margin:"0 auto 22px"}}/>
+        <div style={{display:"flex",alignItems:"center",marginBottom:22}}>
+          <div style={{flex:1}}/>
+          <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)"}}/>
+          <div style={{flex:1,display:"flex",justifyContent:"flex-end"}}>
+            <button onClick={onClose} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,width:28,height:28,cursor:"pointer",color:"var(--muted)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+          </div>
+        </div>
         {isOwn?(
           <div style={{textAlign:"center",padding:"20px 0"}}>
             <div style={{fontSize:52,marginBottom:12}}>🙈</div>
@@ -1026,7 +1038,13 @@ function EditPostModal({ post, onClose, onSaved }: { post: Post; onClose: ()=>vo
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,10,14,.88)",backdropFilter:"blur(6px)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .15s ease both"}}>
       <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both",maxHeight:"90vh",overflowY:"auto"}}>
-        <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)",margin:"0 auto 22px"}}/>
+        <div style={{display:"flex",alignItems:"center",marginBottom:22}}>
+          <div style={{flex:1}}/>
+          <div style={{width:36,height:4,borderRadius:99,background:"var(--border2)"}}/>
+          <div style={{flex:1,display:"flex",justifyContent:"flex-end"}}>
+            <button onClick={onClose} style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,width:28,height:28,cursor:"pointer",color:"var(--muted)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+          </div>
+        </div>
         <div style={{fontFamily:"var(--font-d)",fontSize:20,fontWeight:800,marginBottom:20}}>Editar reto ✏️</div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div>
